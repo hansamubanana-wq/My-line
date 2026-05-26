@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>LINE風高機能チャット（部屋作成対応）</title>
+    <title>LINE風高機能チャット（トーク一覧＆画像送信対応）</title>
     <style>
         * {
             box-sizing: border-box;
@@ -24,18 +24,37 @@
             width: 100%;
             max-width: 500px;
             height: 100%;
-            background-color: #7494c0;
+            background-color: #ffffff;
             display: flex;
             flex-direction: column;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
             position: relative;
         }
 
-        /* ヘッダー */
-        .chat-header {
+        /* 画面の切り替え用スタイル */
+        .screen {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: #ffffff;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        .screen.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* ヘッダー共通 */
+        .header {
             background-color: #273246;
             color: #ffffff;
-            padding: 10px 15px;
+            padding: 12px 15px;
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -47,50 +66,20 @@
             align-items: center;
             width: 100%;
         }
-        .chat-header .title { font-weight: bold; font-size: 1.05rem; }
+        .header .title { font-weight: bold; font-size: 1.1rem; }
         
-        .back-group-btn {
+        .back-btn {
             background-color: #4b5563;
             color: white;
             border: none;
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 0.75rem;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.8rem;
             cursor: pointer;
-            display: none;
         }
 
-        /* 通知ベルボタン */
-        .notification-btn {
-            background: none;
-            border: none;
-            font-size: 1.3rem;
-            cursor: pointer;
-            position: relative;
-            color: white;
-            padding: 5px;
-        }
-        .noti-badge {
-            position: absolute;
-            top: 0;
-            right: 0;
-            background-color: #ef4444;
-            color: white;
-            font-size: 0.65rem;
-            padding: 2px 5px;
-            border-radius: 10px;
-            font-weight: bold;
-            display: none;
-        }
-
-        /* 設定エリア（名前 ＆ ルームパスワード） */
-        .settings-area {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            width: 100%;
-        }
-        .input-row {
+        /* 設定フィールド */
+        .settings-row {
             display: flex;
             gap: 5px;
             width: 100%;
@@ -102,11 +91,10 @@
             border: none;
             font-size: 0.85rem;
             outline: none;
-        }
-        .room-input {
-            background-color: #e2e8f0;
+            background-color: #ffffff;
             color: #333;
         }
+        .room-input { background-color: #e2e8f0; }
         .header-btn {
             background-color: #3b82f6;
             color: white;
@@ -117,11 +105,64 @@
             cursor: pointer;
             font-weight: bold;
         }
-        .room-btn {
-            background-color: #10b981;
+        .room-btn { background-color: #10b981; }
+
+        /* --- トーク一覧画面のスタイル --- */
+        .room-list {
+            flex: 1;
+            overflow-y: auto;
+            background-color: #ffffff;
+        }
+        .room-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+            position: relative;
+        }
+        .room-item:active { background-color: #f9fafb; }
+        .room-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: #333;
+            font-size: 0.9rem;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        .room-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+        .room-name { font-weight: bold; font-size: 0.95rem; color: #111827; }
+        .room-last-msg {
+            font-size: 0.8rem;
+            color: #6b7280;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .room-badge {
+            background-color: #ef4444;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: bold;
+            padding: 2px 7px;
+            border-radius: 10px;
+            margin-left: 10px;
         }
 
-        /* トーク履歴エリア */
+        /* --- トークルーム画面のスタイル --- */
+        #roomScreen { background-color: #7494c0; }
         .chat-log {
             flex: 1;
             overflow-y: auto;
@@ -129,95 +170,42 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
+            background-color: #7494c0;
             -webkit-overflow-scrolling: touch;
         }
-
-        /* メッセージスタイル */
-        .message {
-            display: flex;
-            align-items: flex-end;
-            max-width: 85%;
-        }
+        .message { display: flex; align-items: flex-end; max-width: 85%; }
         .message.received { align-self: flex-start; }
         .message.received .bubble-wrapper { margin-left: 8px; }
-        .message.received .bubble {
-            background-color: #ffffff;
-            color: #000000;
-            border-radius: 15px 15px 15px 0;
-        }
+        .message.received .bubble { background-color: #ffffff; color: #000000; border-radius: 15px 15px 15px 0; }
         
-        .avatar {
+        .chat-avatar {
             width: 40px;
             height: 40px;
-            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
             border-radius: 50%;
             display: flex;
             justify-content: center;
             align-items: center;
             font-size: 0.8rem;
             font-weight: bold;
-            color: #333333;
+            color: #333;
             flex-shrink: 0;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             cursor: pointer;
-            transition: transform 0.1s;
         }
-        .avatar:active { transform: scale(0.9); }
-
         .bubble-wrapper { display: flex; flex-direction: column; }
-        .user-name-label {
-            font-size: 0.7rem;
-            color: #e0e0e0;
-            margin-bottom: 3px;
-            margin-left: 2px;
-        }
-        .message.sent {
-            align-self: flex-end;
-            flex-direction: row-reverse;
-        }
-        .message.sent .bubble {
-            background-color: #85e249;
-            color: #000000;
-            border-radius: 15px 15px 0 15px;
-            margin-right: 8px;
-        }
-        .bubble {
-            padding: 10px 14px;
-            font-size: 0.95rem;
-            line-height: 1.4;
-            word-break: break-all;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.15);
-            white-space: pre-wrap;
-        }
+        .user-name-label { font-size: 0.7rem; color: #e0e0e0; margin-bottom: 3px; margin-left: 2px; }
+        
+        .message.sent { align-self: flex-end; flex-direction: row-reverse; }
+        .message.sent .bubble { background-color: #85e249; color: #000000; border-radius: 15px 15px 0 15px; margin-right: 8px; }
+        
+        .bubble { padding: 10px 14px; font-size: 0.95rem; line-height: 1.4; word-break: break-all; box-shadow: 0 1px 2px rgba(0,0,0,0.15); white-space: pre-wrap; }
+        .sent-image { max-width: 100%; max-height: 180px; border-radius: 10px; display: block; margin-top: 2px; }
 
-        .sent-image {
-            max-width: 100%;
-            max-height: 180px;
-            border-radius: 10px;
-            display: block;
-            margin-top: 2px;
-        }
-
-        .status-area {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            margin: 0 4px;
-        }
+        .status-area { display: flex; flex-direction: column; align-items: flex-end; margin: 0 4px; }
         .message.received .status-area { align-items: flex-start; }
-        .read-status {
-            font-size: 0.65rem;
-            color: #e2ffc9;
-            font-weight: bold;
-            margin-bottom: 2px;
-            min-height: 12px;
-        }
-        .time {
-            font-size: 0.65rem;
-            color: #ffffff;
-            white-space: nowrap;
-            opacity: 0.8;
-        }
+        .read-status { font-size: 0.65rem; color: #e2ffc9; font-weight: bold; margin-bottom: 2px; min-height: 12px; }
+        .time { font-size: 0.65rem; color: #ffffff; white-space: nowrap; opacity: 0.8; }
 
         /* フッター */
         .chat-footer {
@@ -229,154 +217,51 @@
             border-top: 1px solid #ddd;
             padding-bottom: calc(8px + env(safe-area-inset-bottom));
         }
-        .image-send-label {
-            cursor: pointer;
-            padding: 5px;
-            font-size: 1.3rem;
-            color: #666;
-        }
+        .image-send-label { cursor: pointer; padding: 5px; font-size: 1.3rem; color: #666; }
         #imageInput { display: none; }
-        .chat-input {
-            flex: 1;
-            border: 1px solid #ccc;
-            background-color: #ffffff;
-            padding: 8px 14px;
-            border-radius: 20px;
-            font-size: 0.95rem;
-            outline: none;
-        }
-        .send-btn {
-            background-color: #53b63e;
-            color: white;
-            border: none;
-            padding: 7px 14px;
-            border-radius: 20px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 0.85rem;
-        }
-
-        /* 画面中央に浮き出る新・通知トレイポップアップ */
-        .noti-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 100;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s ease;
-        }
-        .noti-overlay.open {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .noti-popup {
-            width: 85%;
-            max-width: 400px;
-            height: 60%;
-            background-color: #ffffff;
-            border-radius: 15px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-        .noti-header {
-            padding: 12px 15px;
-            background-color: #273246;
-            color: white;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-weight: bold;
-            font-size: 0.95rem;
-        }
-        .noti-close-btn {
-            background: none;
-            border: none;
-            color: #ccc;
-            font-size: 0.85rem;
-            cursor: pointer;
-        }
-        .noti-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 5px;
-        }
-        .noti-item {
-            padding: 10px 12px;
-            border-bottom: 1px solid #eee;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-        }
-        .noti-item:hover { background-color: #f9fafb; }
-        .noti-meta {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.7rem;
-            color: #666;
-        }
-        .noti-sender { font-weight: bold; color: #3b82f6; }
-        .noti-text {
-            font-size: 0.8rem;
-            color: #333;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
+        .chat-input { flex: 1; border: 1px solid #ccc; background-color: #ffffff; padding: 8px 14px; border-radius: 20px; font-size: 0.95rem; outline: none; }
+        .send-btn { background-color: #53b63e; color: white; border: none; padding: 7px 14px; border-radius: 20px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
     </style>
 </head>
 <body>
 
 <div class="chat-container">
-    <div class="chat-header">
-        <div class="header-top">
-            <button id="backGroupBtn" class="back-group-btn">◀ 元の部屋</button>
-            <div class="title" id="chatTitle">グループチャット</div>
-            <button id="notificationBtn" class="notification-btn">
-                🔔<span id="notiBadge" class="noti-badge">0</span>
-            </button>
-        </div>
-        
-        <div class="settings-area">
-            <div class="input-row">
+    
+    <div id="listScreen" class="screen active">
+        <div class="header">
+            <div class="header-top">
+                <div class="title">トーク</div>
+            </div>
+            <div class="settings-row">
                 <input type="text" id="nameInput" class="header-input" placeholder="あなたの名前を入力">
-                <button id="saveNameBtn" class="header-btn">名前設定</button>
+                <button id="saveNameBtn" class="header-btn">設定</button>
             </div>
-            <div class="input-row">
-                <input type="text" id="roomInput" class="header-input room-input" placeholder="グループの合言葉（空欄で全体部屋）">
-                <button id="saveRoomBtn" class="header-btn room-btn">部屋移動</button>
+            <div class="settings-row">
+                <input type="text" id="roomInput" class="header-input room-input" placeholder="合言葉を入れると新しいグループを作成">
+                <button id="saveRoomBtn" class="header-btn room-btn">作成・参加</button>
             </div>
         </div>
-    </div>
-    
-    <div class="chat-log" id="chatLog"></div>
-    
-    <div class="chat-footer">
-        <label for="imageInput" class="image-send-label">📎</label>
-        <input type="file" id="imageInput" accept="image/*">
-        
-        <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力">
-        <button id="sendBtn" class="send-btn">送信</button>
+        <div class="room-list" id="roomList">
+            </div>
     </div>
 
-    <div id="notiOverlay" class="noti-overlay">
-        <div class="noti-popup">
-            <div class="noti-header">
-                <span>新着通知履歴</span>
-                <button id="notiCloseBtn" class="noti-close-btn">閉じる ✖</button>
+    <div id="roomScreen" class="screen">
+        <div class="header">
+            <div class="header-top">
+                <button id="backBtn" class="back-btn">◀ トーク一覧</button>
+                <div class="title" id="chatTitle">グループチャット</div>
+                <div style="width: 70px;"></div>
             </div>
-            <div id="notiList" class="noti-list"></div>
+        </div>
+        <div class="chat-log" id="chatLog"></div>
+        <div class="chat-footer">
+            <label for="imageInput" class="image-send-label">📎</label>
+            <input type="file" id="imageInput" accept="image/*">
+            <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力">
+            <button id="sendBtn" class="send-btn">送信</button>
         </div>
     </div>
+
 </div>
 
 <script type="module">
@@ -399,12 +284,15 @@
 
     let currentUserId = null;
     let currentUserName = "";
-    
-    // 部屋管理用の変数
-    let baseGroupRoomId = "global_group"; // 基本の全体グループID
     let currentRoomId = "global_group"; 
+    
     let unsubscribeChat = null;
+    let allMessages = []; // 全メッセージを保持して一覧用に使用
 
+    // 画面要素
+    const listScreen = document.getElementById('listScreen');
+    const roomScreen = document.getElementById('roomScreen');
+    const roomList = document.getElementById('roomList');
     const chatLog = document.getElementById('chatLog');
     const chatInput = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendBtn');
@@ -414,13 +302,7 @@
     const saveRoomBtn = document.getElementById('saveRoomBtn');
     const imageInput = document.getElementById('imageInput');
     const chatTitle = document.getElementById('chatTitle');
-    const backGroupBtn = document.getElementById('backGroupBtn');
-    
-    const notificationBtn = document.getElementById('notificationBtn');
-    const notiBadge = document.getElementById('notiBadge');
-    const notiOverlay = document.getElementById('notiOverlay');
-    const notiCloseBtn = document.getElementById('notiCloseBtn');
-    const notiList = document.getElementById('notiList');
+    const backBtn = document.getElementById('backBtn');
 
     function setScreenSize() {
         let vh = window.innerHeight * 0.01;
@@ -429,11 +311,6 @@
     window.addEventListener('resize', setScreenSize);
     window.addEventListener('orientationchange', setScreenSize);
     setScreenSize();
-
-    // 通知トレイの表示切り替え（中央ポップアップ）
-    notificationBtn.addEventListener('click', () => notiOverlay.classList.add('open'));
-    notiCloseBtn.addEventListener('click', () => notiOverlay.classList.remove('open'));
-    notiOverlay.addEventListener('click', (e) => { if(e.target === notiOverlay) notiOverlay.classList.remove('open'); });
 
     // 1. 匿名ログイン
     signInAnonymously(auth).catch((err) => alert("ログインエラー: " + err.message));
@@ -445,51 +322,31 @@
             currentUserName = savedName || "ユーザー_" + currentUserId.substring(currentUserId.length - 4);
             nameInput.value = currentUserName;
             
-            // 保存された合言葉があれば読み込む
-            const savedRoomPw = localStorage.getItem('chat_room_pw') || "";
-            roomInput.value = savedRoomPw;
-            
-            if (savedRoomPw !== "") {
-                baseGroupRoomId = "custom_" + savedRoomPw;
-                switchRoom(baseGroupRoomId, `グループ: ${savedRoomPw}`);
-            } else {
-                baseGroupRoomId = "global_group";
-                switchRoom("global_group", "グループチャット");
-            }
-            
-            startNotificationListener();
+            // 全てのメッセージの監視（一覧画面の更新用）
+            startGlobalListener();
         }
     });
 
-    // 名前保存
     saveNameBtn.addEventListener('click', () => {
         const inputName = nameInput.value.trim();
         if (inputName !== "") {
             currentUserName = inputName;
             localStorage.setItem('chat_user_name', inputName);
             alert("名前を「" + inputName + "」に設定したよ！");
+            renderRoomList();
         }
     });
 
-    // ★新機能：合言葉で部屋を作る・移動する処理
+    // 合言葉で新しい部屋を作る・入る
     saveRoomBtn.addEventListener('click', () => {
         const pw = roomInput.value.trim();
-        if (pw === "") {
-            // 空欄ならデフォルトの部屋に戻す
-            baseGroupRoomId = "global_group";
-            localStorage.removeItem('chat_room_pw');
-            switchRoom("global_group", "グループチャット");
-            alert("全体のグループチャットに戻ったよ！");
-        } else {
-            // パスワードが入力されていれば、それを元に専用のRoomIDを作る
-            baseGroupRoomId = "custom_" + pw;
-            localStorage.setItem('chat_room_pw', pw);
-            switchRoom(baseGroupRoomId, `グループ: ${pw}`);
-            alert(`合言葉「${pw}」のグループに移動・作成したよ！`);
+        if (pw !== "") {
+            roomInput.value = "";
+            openRoom("custom_" + pw, `グループ: ${pw}`);
         }
     });
 
-    // 2. メッセージ送信（文字）
+    // 2. 文字送信
     async function sendMessage() {
         const text = chatInput.value.trim();
         if (text === "" || !currentUserId) return;
@@ -507,74 +364,172 @@
             chatInput.value = "";
         } catch (err) { alert("送信失敗: " + err.message); }
     }
-
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-    // 3. 画像送信
-    imageInput.addEventListener('change', (e) => {
+    // 3. 【超重要】画像送信の改良（無料アップローダー連携）
+    imageInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file || !currentUserId) return;
 
-        const reader = new FileReader();
-        reader.onload = async function(event) {
-            const base64Data = event.target.result;
-            try {
+        // 送信中とわかるように仮メッセージを出すか、アラートを出す
+        sendBtn.disabled = true;
+        sendBtn.textContent = "送信中";
+
+        // Imgurという超有名画像サービスへ匿名で無料アップロードするシステム（容量制限なし）
+        const formData = new FormData();
+        formData.append('image', file);
+
+        try {
+            // 無料公開の共有APIを借りてアップロード
+            const response = await fetch('https://api.imgur.com/3/image', {
+                method: 'POST',
+                headers: { Authorization: 'Client-ID 7f20108ecf661ff' }, // フリーキー
+                body: formData
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                const imgUrl = result.data.link; // 完璧な画像URLがゲットできる
+                
+                // FirebaseにはURLだけを保存するから一瞬＆完全無料！
                 await addDoc(collection(db, "messages"), {
                     roomId: currentRoomId,
                     userId: currentUserId,
                     userName: currentUserName,
-                    imageUrl: base64Data,
+                    imageUrl: imgUrl,
                     type: "image",
                     timestamp: serverTimestamp(),
                     readUsers: [currentUserId]
                 });
-                imageInput.value = "";
-            } catch (err) { alert("画像送信失敗: " + err.message); }
-        };
-        reader.readAsDataURL(file);
+            } else {
+                alert("画像の変換に失敗しました。もう一度試してください。");
+            }
+        } catch (err) {
+            alert("画像送信エラー: " + err.message);
+        } finally {
+            imageInput.value = "";
+            sendBtn.disabled = false;
+            sendBtn.textContent = "送信";
+        }
     });
 
-    // 4. トーク部屋の切り替え
-    function switchRoom(roomId, roomTitle) {
+    // 4. 画面と部屋の行き来システム
+    function openRoom(roomId, title) {
         currentRoomId = roomId;
-        chatTitle.textContent = roomTitle;
-
-        // 個人トークから「自分が今いるグループ部屋」に戻るための判定
-        if (roomId === baseGroupRoomId) {
-            backGroupBtn.style.display = "none";
-        } else {
-            backGroupBtn.style.display = "block";
-            // 個人トークに入った時は、ボタンの文字を今いるグループ名に合わせる
-            backGroupBtn.textContent = baseGroupRoomId === "global_group" ? "◀ 全体グループ" : "◀ 合言葉部屋";
-        }
+        chatTitle.textContent = title;
+        
+        listScreen.classList.remove('active');
+        roomScreen.classList.add('active');
 
         if (unsubscribeChat) unsubscribeChat();
         chatLog.innerHTML = "";
         startChatLiveUpdate();
     }
 
-    // 元のグループに戻るボタン
-    backGroupBtn.addEventListener('click', () => {
-        const title = baseGroupRoomId === "global_group" ? "グループチャット" : `グループ: ${roomInput.value.trim()}`;
-        switchRoom(baseGroupRoomId, title);
+    backBtn.addEventListener('click', () => {
+        roomScreen.classList.remove('active');
+        listScreen.classList.add('active');
+        if (unsubscribeChat) unsubscribeChat();
+        currentRoomId = "";
     });
 
-    // アイコンタップで個人トーク
     function openPrivateChat(targetUserId, targetUserName) {
         if (targetUserId === currentUserId) return;
         const sortedIds = [currentUserId, targetUserId].sort();
         const privateRoomId = `private_${sortedIds[0]}_${sortedIds[1]}`;
-        switchRoom(privateRoomId, `${targetUserName} との個人トーク`);
+        openRoom(privateRoomId, `${targetUserName} との個人トーク`);
     }
 
-    // 5. チャットログの同期
+    // 5. グローバル監視（LINE風トーク一覧の更新用）
+    function startGlobalListener() {
+        const qAll = query(collection(db, "messages"), orderBy("timestamp", "desc"));
+        onSnapshot(qAll, (snapshot) => {
+            allMessages = [];
+            snapshot.forEach(doc => {
+                allMessages.push({ id: doc.id, ...doc.data() });
+            });
+            renderRoomList(); // データが変わったら一覧を再描画
+        });
+    }
+
+    // LINE風トーク一覧を組み立てる処理
+    function renderRoomList() {
+        roomList.innerHTML = "";
+
+        // 最低限「全体グループチャット」は常に一覧の一番上に表示する
+        const roomsData = {};
+        roomsData["global_group"] = { name: "グループチャット（全体）", lastMsg: "まだメッセージはありません", unread: 0, timestamp: 0 };
+
+        // 届いた全メッセージを解析して、部屋ごとの「最新メッセージ」と「未読数」を計算
+        allMessages.forEach(msg => {
+            if (!msg.timestamp) return;
+
+            let rId = msg.roomId || "global_group";
+            let isForMe = false;
+            let roomName = "秘密のグループ";
+
+            if (rId === "global_group") {
+                isForMe = true;
+            } else if (rId.startsWith("custom_")) {
+                isForMe = true;
+                roomName = "グループ: " + rId.replace("custom_", "");
+            } else if (rId.startsWith("private_") && rId.includes(currentUserId)) {
+                isForMe = true;
+                // 個人トークの場合は、相手の名前を部屋名にする
+                roomName = msg.userId === currentUserId ? "個人トーク" : msg.userName;
+            }
+
+            if (isForMe) {
+                // まだ登録されていない部屋なら初期化
+                if (!roomsData[rId]) {
+                    roomsData[rId] = { name: roomName, lastMsg: "", unread: 0, timestamp: 0 };
+                }
+
+                // 最初の1件（＝最新のメッセージ）を記録
+                if (roomsData[rId].timestamp === 0) {
+                    roomsData[rId].lastMsg = msg.type === "image" ? "[画像]" : `${msg.userName}: ${msg.messageText}`;
+                    roomsData[rId].timestamp = msg.timestamp.toDate().getTime();
+                }
+
+                // 未読カウント（自分がまだ既読をつけていない他人のメッセージ）
+                if (msg.userId !== currentUserId && (!msg.readUsers || !msg.readUsers.includes(currentUserId))) {
+                    roomsData[rId].unread++;
+                }
+            }
+        });
+
+        // 日付が新しい順に並び替えて一覧を作成
+        const sortedRooms = Object.keys(roomsData).sort((a,b) => roomsData[b].timestamp - roomsData[a].timestamp);
+
+        sortedRooms.forEach(roomId => {
+            const room = roomsData[roomId];
+            const item = document.createElement('div');
+            item.className = "room-item";
+            
+            const shortName = room.name.substring(0, 2);
+            const badgeHtml = room.unread > 0 ? `<span class="room-badge">${room.unread}</span>` : "";
+
+            item.innerHTML = `
+                <div class="room-icon">${shortName}</div>
+                <div class="room-info">
+                    <div class="room-name">${room.name}</div>
+                    <div class="room-last-msg">${room.lastMsg}</div>
+                </div>
+                ${badgeHtml}
+            `;
+
+            item.addEventListener('click', () => {
+                openRoom(roomId, room.name);
+            });
+
+            roomList.appendChild(item);
+        });
+    }
+
+    // 6. トークルーム内のリアルタイム同期
     function startChatLiveUpdate() {
-        const q = query(
-            collection(db, "messages"), 
-            where("roomId", "==", currentRoomId),
-            orderBy("timestamp", "asc")
-        );
+        const q = query(collection(db, "messages"), where("roomId", "==", currentRoomId), orderBy("timestamp", "asc"));
         
         unsubscribeChat = onSnapshot(q, (snapshot) => {
             chatLog.innerHTML = "";
@@ -621,7 +576,7 @@
                     const shortName = displayName.substring(0, 2);
                     
                     messageHtml.innerHTML = `
-                        <div class="avatar" id="avatar-${snapshotDoc.id}">${shortName}</div>
+                        <div class="chat-avatar" id="avatar-${snapshotDoc.id}">${shortName}</div>
                         <div class="bubble-wrapper">
                             <span class="user-name-label">${displayName}</span>
                             <div class="bubble">${contentHtml}</div>
@@ -645,74 +600,6 @@
             });
 
             chatLog.scrollTop = chatLog.scrollHeight;
-        });
-    }
-
-    // 6. 全通知の監視
-    function startNotificationListener() {
-        const qNoti = query(collection(db, "messages"), orderBy("timestamp", "desc"));
-        
-        onSnapshot(qNoti, (snapshot) => {
-            notiList.innerHTML = "";
-            let unreadCount = 0;
-
-            snapshot.forEach((snapshotDoc) => {
-                const data = snapshotDoc.data();
-                if (!data.timestamp) return;
-
-                const isMe = data.userId === currentUserId;
-                let isForMe = false;
-                let roomLabel = "グループ";
-
-                // 通知の対象を判定（全体部屋、もしくは自分がいる合言葉部屋、または自分宛ての個人トーク）
-                if (data.roomId === baseGroupRoomId) {
-                    isForMe = true; 
-                    roomLabel = baseGroupRoomId === "global_group" ? "全体グループ" : "合言葉部屋";
-                } else if (data.roomId.startsWith("private_") && data.roomId.includes(currentUserId)) {
-                    isForMe = true;
-                    roomLabel = "個人トーク";
-                }
-
-                if (isForMe && !isMe) {
-                    const hasRead = data.readUsers && data.readUsers.includes(currentUserId);
-                    if (!hasRead) unreadCount++;
-
-                    const previewText = data.type === "image" ? "[画像メッセージ]" : data.messageText;
-                    const date = data.timestamp.toDate();
-                    const timeStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
-
-                    const notiItem = document.createElement('div');
-                    notiItem.className = "noti-item";
-                    if (!hasRead) notiItem.style.backgroundColor = "#fffbeb";
-
-                    notiItem.innerHTML = `
-                        <div class="noti-meta">
-                            <span class="noti-sender">${data.userName} (${roomLabel})</span>
-                            <span>${timeStr}</span>
-                        </div>
-                        <div class="noti-text">${previewText}</div>
-                    `;
-
-                    notiItem.addEventListener('click', () => {
-                        notiOverlay.classList.remove('open');
-                        if (data.roomId === baseGroupRoomId) {
-                            const title = baseGroupRoomId === "global_group" ? "グループチャット" : `グループ: ${roomInput.value.trim()}`;
-                            switchRoom(baseGroupRoomId, title);
-                        } else {
-                            switchRoom(data.roomId, `${data.userName} との個人トーク`);
-                        }
-                    });
-
-                    notiList.appendChild(notiItem);
-                }
-            });
-
-            if (unreadCount > 0) {
-                notiBadge.textContent = unreadCount;
-                notiBadge.style.display = "block";
-            } else {
-                notiBadge.style.display = "none";
-            }
         });
     }
 </script>
