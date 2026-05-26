@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>LINE風チャット（通知履歴機能付き）</title>
+    <title>LINE風高機能チャット（部屋作成対応）</title>
     <style>
         * {
             box-sizing: border-box;
@@ -38,7 +38,6 @@
             padding: 10px 15px;
             display: flex;
             flex-direction: column;
-            align-items: center;
             gap: 8px;
             z-index: 10;
         }
@@ -81,15 +80,22 @@
             padding: 2px 5px;
             border-radius: 10px;
             font-weight: bold;
-            display: none; /* 通知がある時だけJSで表示 */
+            display: none;
         }
 
-        .name-setter {
+        /* 設定エリア（名前 ＆ ルームパスワード） */
+        .settings-area {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            width: 100%;
+        }
+        .input-row {
             display: flex;
             gap: 5px;
             width: 100%;
         }
-        .name-input {
+        .header-input {
             flex: 1;
             padding: 6px 12px;
             border-radius: 20px;
@@ -97,7 +103,11 @@
             font-size: 0.85rem;
             outline: none;
         }
-        .save-name-btn {
+        .room-input {
+            background-color: #e2e8f0;
+            color: #333;
+        }
+        .header-btn {
             background-color: #3b82f6;
             color: white;
             border: none;
@@ -106,6 +116,9 @@
             font-size: 0.85rem;
             cursor: pointer;
             font-weight: bold;
+        }
+        .room-btn {
+            background-color: #10b981;
         }
 
         /* トーク履歴エリア */
@@ -243,64 +256,77 @@
             font-size: 0.85rem;
         }
 
-        /* 通知トレイ画面（下からスライドするよ） */
-        .noti-tray {
+        /* 画面中央に浮き出る新・通知トレイポップアップ */
+        .noti-overlay {
             position: absolute;
-            bottom: -100%; /* 最初は隠れてる */
+            top: 0;
             left: 0;
             width: 100%;
-            height: 70%;
-            background-color: #ffffff;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
             z-index: 100;
-            border-radius: 20px 20px 0 0;
-            box-shadow: 0 -4px 15px rgba(0,0,0,0.3);
-            transition: bottom 0.3s ease-out;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        .noti-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .noti-popup {
+            width: 85%;
+            max-width: 400px;
+            height: 60%;
+            background-color: #ffffff;
+            border-radius: 15px;
             display: flex;
             flex-direction: column;
-        }
-        .noti-tray.open {
-            bottom: 0; /* 開いた状態 */
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
         .noti-header {
-            padding: 15px;
+            padding: 12px 15px;
             background-color: #273246;
             color: white;
-            border-radius: 20px 20px 0 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-weight: bold;
+            font-size: 0.95rem;
         }
         .noti-close-btn {
             background: none;
             border: none;
             color: #ccc;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             cursor: pointer;
         }
         .noti-list {
             flex: 1;
             overflow-y: auto;
-            padding: 10px;
+            padding: 5px;
         }
         .noti-item {
-            padding: 12px;
+            padding: 10px 12px;
             border-bottom: 1px solid #eee;
             cursor: pointer;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 3px;
         }
         .noti-item:hover { background-color: #f9fafb; }
         .noti-meta {
             display: flex;
             justify-content: space-between;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: #666;
         }
         .noti-sender { font-weight: bold; color: #3b82f6; }
         .noti-text {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: #333;
             white-space: nowrap;
             overflow: hidden;
@@ -313,15 +339,22 @@
 <div class="chat-container">
     <div class="chat-header">
         <div class="header-top">
-            <button id="backGroupBtn" class="back-group-btn">◀ グループ</button>
+            <button id="backGroupBtn" class="back-group-btn">◀ 元の部屋</button>
             <div class="title" id="chatTitle">グループチャット</div>
             <button id="notificationBtn" class="notification-btn">
                 🔔<span id="notiBadge" class="noti-badge">0</span>
             </button>
         </div>
-        <div class="name-setter">
-            <input type="text" id="nameInput" class="name-input" placeholder="あなたの名前を入力">
-            <button id="saveNameBtn" class="save-name-btn">設定</button>
+        
+        <div class="settings-area">
+            <div class="input-row">
+                <input type="text" id="nameInput" class="header-input" placeholder="あなたの名前を入力">
+                <button id="saveNameBtn" class="header-btn">名前設定</button>
+            </div>
+            <div class="input-row">
+                <input type="text" id="roomInput" class="header-input room-input" placeholder="グループの合言葉（空欄で全体部屋）">
+                <button id="saveRoomBtn" class="header-btn room-btn">部屋移動</button>
+            </div>
         </div>
     </div>
     
@@ -335,13 +368,14 @@
         <button id="sendBtn" class="send-btn">送信</button>
     </div>
 
-    <div id="notiTray" class="noti-tray">
-        <div class="noti-header">
-            <span>新着通知履歴</span>
-            <button id="notiCloseBtn" class="noti-close-btn">閉じる ✖</button>
-        </div>
-        <div id="notiList" class="noti-list">
+    <div id="notiOverlay" class="noti-overlay">
+        <div class="noti-popup">
+            <div class="noti-header">
+                <span>新着通知履歴</span>
+                <button id="notiCloseBtn" class="noti-close-btn">閉じる ✖</button>
             </div>
+            <div id="notiList" class="noti-list"></div>
+        </div>
     </div>
 </div>
 
@@ -365,6 +399,9 @@
 
     let currentUserId = null;
     let currentUserName = "";
+    
+    // 部屋管理用の変数
+    let baseGroupRoomId = "global_group"; // 基本の全体グループID
     let currentRoomId = "global_group"; 
     let unsubscribeChat = null;
 
@@ -373,14 +410,15 @@
     const sendBtn = document.getElementById('sendBtn');
     const nameInput = document.getElementById('nameInput');
     const saveNameBtn = document.getElementById('saveNameBtn');
+    const roomInput = document.getElementById('roomInput');
+    const saveRoomBtn = document.getElementById('saveRoomBtn');
     const imageInput = document.getElementById('imageInput');
     const chatTitle = document.getElementById('chatTitle');
     const backGroupBtn = document.getElementById('backGroupBtn');
     
-    // 通知関連の要素
     const notificationBtn = document.getElementById('notificationBtn');
     const notiBadge = document.getElementById('notiBadge');
-    const notiTray = document.getElementById('notiTray');
+    const notiOverlay = document.getElementById('notiOverlay');
     const notiCloseBtn = document.getElementById('notiCloseBtn');
     const notiList = document.getElementById('notiList');
 
@@ -392,9 +430,10 @@
     window.addEventListener('orientationchange', setScreenSize);
     setScreenSize();
 
-    // 通知トレイの開け閉め
-    notificationBtn.addEventListener('click', () => notiTray.classList.toggle('open'));
-    notiCloseBtn.addEventListener('click', () => notiTray.classList.remove('open'));
+    // 通知トレイの表示切り替え（中央ポップアップ）
+    notificationBtn.addEventListener('click', () => notiOverlay.classList.add('open'));
+    notiCloseBtn.addEventListener('click', () => notiOverlay.classList.remove('open'));
+    notiOverlay.addEventListener('click', (e) => { if(e.target === notiOverlay) notiOverlay.classList.remove('open'); });
 
     // 1. 匿名ログイン
     signInAnonymously(auth).catch((err) => alert("ログインエラー: " + err.message));
@@ -406,17 +445,47 @@
             currentUserName = savedName || "ユーザー_" + currentUserId.substring(currentUserId.length - 4);
             nameInput.value = currentUserName;
             
-            switchRoom("global_group", "グループチャット");
-            startNotificationListener(); // 全部屋の通知監視をスタート
+            // 保存された合言葉があれば読み込む
+            const savedRoomPw = localStorage.getItem('chat_room_pw') || "";
+            roomInput.value = savedRoomPw;
+            
+            if (savedRoomPw !== "") {
+                baseGroupRoomId = "custom_" + savedRoomPw;
+                switchRoom(baseGroupRoomId, `グループ: ${savedRoomPw}`);
+            } else {
+                baseGroupRoomId = "global_group";
+                switchRoom("global_group", "グループチャット");
+            }
+            
+            startNotificationListener();
         }
     });
 
+    // 名前保存
     saveNameBtn.addEventListener('click', () => {
         const inputName = nameInput.value.trim();
         if (inputName !== "") {
             currentUserName = inputName;
             localStorage.setItem('chat_user_name', inputName);
             alert("名前を「" + inputName + "」に設定したよ！");
+        }
+    });
+
+    // ★新機能：合言葉で部屋を作る・移動する処理
+    saveRoomBtn.addEventListener('click', () => {
+        const pw = roomInput.value.trim();
+        if (pw === "") {
+            // 空欄ならデフォルトの部屋に戻す
+            baseGroupRoomId = "global_group";
+            localStorage.removeItem('chat_room_pw');
+            switchRoom("global_group", "グループチャット");
+            alert("全体のグループチャットに戻ったよ！");
+        } else {
+            // パスワードが入力されていれば、それを元に専用のRoomIDを作る
+            baseGroupRoomId = "custom_" + pw;
+            localStorage.setItem('chat_room_pw', pw);
+            switchRoom(baseGroupRoomId, `グループ: ${pw}`);
+            alert(`合言葉「${pw}」のグループに移動・作成したよ！`);
         }
     });
 
@@ -471,10 +540,13 @@
         currentRoomId = roomId;
         chatTitle.textContent = roomTitle;
 
-        if (roomId === "global_group") {
+        // 個人トークから「自分が今いるグループ部屋」に戻るための判定
+        if (roomId === baseGroupRoomId) {
             backGroupBtn.style.display = "none";
         } else {
             backGroupBtn.style.display = "block";
+            // 個人トークに入った時は、ボタンの文字を今いるグループ名に合わせる
+            backGroupBtn.textContent = baseGroupRoomId === "global_group" ? "◀ 全体グループ" : "◀ 合言葉部屋";
         }
 
         if (unsubscribeChat) unsubscribeChat();
@@ -482,10 +554,13 @@
         startChatLiveUpdate();
     }
 
+    // 元のグループに戻るボタン
     backGroupBtn.addEventListener('click', () => {
-        switchRoom("global_group", "グループチャット");
+        const title = baseGroupRoomId === "global_group" ? "グループチャット" : `グループ: ${roomInput.value.trim()}`;
+        switchRoom(baseGroupRoomId, title);
     });
 
+    // アイコンタップで個人トーク
     function openPrivateChat(targetUserId, targetUserName) {
         if (targetUserId === currentUserId) return;
         const sortedIds = [currentUserId, targetUserId].sort();
@@ -573,9 +648,8 @@
         });
     }
 
-    // ★新機能：全メッセージを監視して未読通知履歴を作るシステム
+    // 6. 全通知の監視
     function startNotificationListener() {
-        // すべての部屋のメッセージを日付が新しい順（降順）に取得
         const qNoti = query(collection(db, "messages"), orderBy("timestamp", "desc"));
         
         onSnapshot(qNoti, (snapshot) => {
@@ -587,35 +661,28 @@
                 if (!data.timestamp) return;
 
                 const isMe = data.userId === currentUserId;
-                
-                // 1. 自分宛ての個人トーク、もしくはグループチャットのメッセージか判定
                 let isForMe = false;
                 let roomLabel = "グループ";
 
-                if (data.roomId === "global_group") {
-                    isForMe = true; // グループチャットは全員向け
+                // 通知の対象を判定（全体部屋、もしくは自分がいる合言葉部屋、または自分宛ての個人トーク）
+                if (data.roomId === baseGroupRoomId) {
+                    isForMe = true; 
+                    roomLabel = baseGroupRoomId === "global_group" ? "全体グループ" : "合言葉部屋";
                 } else if (data.roomId.startsWith("private_") && data.roomId.includes(currentUserId)) {
-                    isForMe = true; // 自分が入っている個人トーク部屋
+                    isForMe = true;
                     roomLabel = "個人トーク";
                 }
 
-                // 自分宛て かつ 他人が送ったメッセージの場合のみ通知
                 if (isForMe && !isMe) {
                     const hasRead = data.readUsers && data.readUsers.includes(currentUserId);
-                    
-                    // まだ読んでいなければ未読カウントを増やす
                     if (!hasRead) unreadCount++;
 
-                    // 通知のテキストを作る（画像なら「[画像が送信されました]」）
                     const previewText = data.type === "image" ? "[画像メッセージ]" : data.messageText;
-                    
                     const date = data.timestamp.toDate();
                     const timeStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
 
-                    // 通知アイテムのHTMLを作成
                     const notiItem = document.createElement('div');
                     notiItem.className = "noti-item";
-                    // まだ読んでない通知は背景を少し薄黄色にする
                     if (!hasRead) notiItem.style.backgroundColor = "#fffbeb";
 
                     notiItem.innerHTML = `
@@ -626,11 +693,11 @@
                         <div class="noti-text">${previewText}</div>
                     `;
 
-                    // 通知履歴をタップした時に、その部屋へ直接ジャンプする処理！
                     notiItem.addEventListener('click', () => {
-                        notiTray.classList.remove('open'); // 通知を閉じる
-                        if (data.roomId === "global_group") {
-                            switchRoom("global_group", "グループチャット");
+                        notiOverlay.classList.remove('open');
+                        if (data.roomId === baseGroupRoomId) {
+                            const title = baseGroupRoomId === "global_group" ? "グループチャット" : `グループ: ${roomInput.value.trim()}`;
+                            switchRoom(baseGroupRoomId, title);
                         } else {
                             switchRoom(data.roomId, `${data.userName} との個人トーク`);
                         }
@@ -640,7 +707,6 @@
                 }
             });
 
-            // バッジの数字を更新
             if (unreadCount > 0) {
                 notiBadge.textContent = unreadCount;
                 notiBadge.style.display = "block";
