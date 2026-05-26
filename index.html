@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LINE風リアルタイムチャット</title>
+    <style>
+        /* 全体のリセットと背景 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+        }
+        body {
+            background-color: #7494c0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        /* チャットコンテナ */
+        .chat-container {
+            width: 100%;
+            max-width: 450px;
+            height: 100vh;
+            max-height: 800px;
+            background-color: #7494c0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+
+        /* ヘッダー部分 */
+        .chat-header {
+            background-color: #273246;
+            color: #ffffff;
+            padding: 15px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        /* トーク履歴エリア */
+        .chat-log {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* メッセージの共通スタイル */
+        .message {
+            display: flex;
+            align-items: flex-end;
+            max-width: 75%;
+        }
+
+        /* 相手のメッセージ（左側） */
+        .message.received {
+            align-self: flex-start;
+        }
+        .message.received .bubble {
+            background-color: #ffffff;
+            color: #000000;
+            border-radius: 15px 15px 15px 0;
+            margin-left: 10px;
+        }
+
+        /* アイコン */
+        .avatar {
+            width: 40px;
+            height: 40px;
+            background-color: #ddd;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #555;
+            flex-shrink: 0;
+        }
+
+        /* 自分のメッセージ（右側） */
+        .message.sent {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+        .message.sent .bubble {
+            background-color: #85e249;
+            color: #000000;
+            border-radius: 15px 15px 0 15px;
+            margin-right: 10px;
+        }
+
+        /* 吹き出しのテキスト */
+        .bubble {
+            padding: 10px 14px;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            word-break: break-all;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            white-space: pre-wrap; /* 改行を反映 */
+        }
+
+        /* 時間の表示 */
+        .time {
+            font-size: 0.7rem;
+            color: #ffffff;
+            margin: 0 5px;
+            white-space: nowrap;
+            opacity: 0.8;
+        }
+
+        /* フッター（入力エリア） */
+        .chat-footer {
+            background-color: #ffffff;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .chat-input {
+            flex: 1;
+            border: none;
+            background-color: #f0f0f0;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 0.95rem;
+            outline: none;
+        }
+        .send-btn {
+            background-color: #53b63e;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .send-btn:hover {
+            background-color: #459d32;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div class="chat-header">みんなのチャットルーム</div>
+    <div class="chat-log" id="chatLog">
+        </div>
+    <div class="chat-footer">
+        <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力">
+        <button id="sendBtn" class="send-btn">送信</button>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // 創一のFirebase設定情報をここにセットしたよ！
+    const firebaseConfig = {
+        apiKey: "AIzaSyCbFEZH9VywEFumJRbbqPftEJAZJDb8hQ0",
+        authDomain: "my-line-chat-f467e.firebaseapp.com",
+        projectId: "my-line-chat-f467e",
+        storageBucket: "my-line-chat-f467e.firebasestorage.app",
+        messagingSenderId: "175651281929",
+        appId: "1:175651281929:web:0644d6cd4449edbbfb6cd8"
+    };
+
+    // Firebaseの初期化
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // 今回は誰が送っても区別できるように、ランダムなユーザーID（または「自分」）を仮で作るよ
+    // 本来はログイン機能を作るけど、まずは簡単に体験するため！
+    const myId = "user_" + Math.floor(Math.random() * 1000); 
+
+    const chatLog = document.getElementById('chatLog');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    // 1. メッセージをFirebaseに送信する処理
+    async function sendMessage() {
+        const text = chatInput.value.trim();
+        if (text === "") return; // 空っぽなら何もしない
+
+        try {
+            // Firestoreの「messages」というコレクション（箱）にデータを追加
+            await addDoc(collection(db, "messages"), {
+                userId: myId,
+                messageText: text,
+                timestamp: serverTimestamp() // サーバーの正確な時間
+            });
+            chatInput.value = ""; // 入力欄を空にする
+        } catch (error) {
+            console.error("エラーが発生したよ: ", error);
+        }
+    }
+
+    // ボタンクリックやEnterキーで送信
+    sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+
+    // 2. Firebaseからリアルタイムにメッセージを受け取る処理
+    const q = query(collection(db, "messages"), orderBy("timestamp", "asc"));
+    
+    // データベースに変更があったら勝手に実行される（リアルタイム同期）
+    onSnapshot(q, (snapshot) => {
+        chatLog.innerHTML = ""; // 一旦画面をクリアして再描画
+
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            if (!data.timestamp) return; // 時間がまだ取得できてなければパス
+
+            // 時間のフォーマット（時:分）
+            const date = data.timestamp.toDate();
+            const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
+
+            // 自分が送ったメッセージか、他の人が送ったメッセージか判定
+            const isMe = data.userId === myId;
+            const messageClass = isMe ? "sent" : "received";
+
+            // HTMLの組み立て
+            let messageHtml = "";
+            if (isMe) {
+                messageHtml = `
+                    <div class="message sent">
+                        <div class="bubble">${data.messageText}</div>
+                        <span class="time">${timeStr}</span>
+                    </div>
+                `;
+            } else {
+                messageHtml = `
+                    <div class="message received">
+                        <div class="avatar">他</div>
+                        <div class="bubble">${data.messageText}</div>
+                        <span class="time">${timeStr}</span>
+                    </div>
+                `;
+            }
+
+            chatLog.insertAdjacentHTML('beforeend', messageHtml);
+        });
+
+        // 一番下まで自動スクロール
+        chatLog.scrollTop = chatLog.scrollHeight;
+    });
+</script>
+
+</body>
+</html>
