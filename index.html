@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>LINE風チャット（グループ＆個人トーク対応）</title>
+    <title>LINE風チャット（通知履歴機能付き）</title>
     <style>
         * {
             box-sizing: border-box;
@@ -50,7 +50,6 @@
         }
         .chat-header .title { font-weight: bold; font-size: 1.05rem; }
         
-        /* グループに戻るボタン */
         .back-group-btn {
             background-color: #4b5563;
             color: white;
@@ -59,7 +58,30 @@
             border-radius: 12px;
             font-size: 0.75rem;
             cursor: pointer;
-            display: none; /* 個人トークの時だけJSで表示 */
+            display: none;
+        }
+
+        /* 通知ベルボタン */
+        .notification-btn {
+            background: none;
+            border: none;
+            font-size: 1.3rem;
+            cursor: pointer;
+            position: relative;
+            color: white;
+            padding: 5px;
+        }
+        .noti-badge {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background-color: #ef4444;
+            color: white;
+            font-size: 0.65rem;
+            padding: 2px 5px;
+            border-radius: 10px;
+            font-weight: bold;
+            display: none; /* 通知がある時だけJSで表示 */
         }
 
         .name-setter {
@@ -111,7 +133,6 @@
             border-radius: 15px 15px 15px 0;
         }
         
-        /* 相手のアイコン（タップ可能に） */
         .avatar {
             width: 40px;
             height: 40px;
@@ -125,17 +146,12 @@
             color: #333333;
             flex-shrink: 0;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            cursor: pointer; /* 押せるよマーク */
+            cursor: pointer;
             transition: transform 0.1s;
         }
-        .avatar:active {
-            transform: scale(0.9); /* タップした時に少し凹む演出 */
-        }
+        .avatar:active { transform: scale(0.9); }
 
-        .bubble-wrapper {
-            display: flex;
-            flex-direction: column;
-        }
+        .bubble-wrapper { display: flex; flex-direction: column; }
         .user-name-label {
             font-size: 0.7rem;
             color: #e0e0e0;
@@ -169,7 +185,6 @@
             margin-top: 2px;
         }
 
-        /* ステータス */
         .status-area {
             display: flex;
             flex-direction: column;
@@ -227,6 +242,70 @@
             cursor: pointer;
             font-size: 0.85rem;
         }
+
+        /* 通知トレイ画面（下からスライドするよ） */
+        .noti-tray {
+            position: absolute;
+            bottom: -100%; /* 最初は隠れてる */
+            left: 0;
+            width: 100%;
+            height: 70%;
+            background-color: #ffffff;
+            z-index: 100;
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.3);
+            transition: bottom 0.3s ease-out;
+            display: flex;
+            flex-direction: column;
+        }
+        .noti-tray.open {
+            bottom: 0; /* 開いた状態 */
+        }
+        .noti-header {
+            padding: 15px;
+            background-color: #273246;
+            color: white;
+            border-radius: 20px 20px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+        }
+        .noti-close-btn {
+            background: none;
+            border: none;
+            color: #ccc;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .noti-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .noti-item {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .noti-item:hover { background-color: #f9fafb; }
+        .noti-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #666;
+        }
+        .noti-sender { font-weight: bold; color: #3b82f6; }
+        .noti-text {
+            font-size: 0.85rem;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     </style>
 </head>
 <body>
@@ -236,7 +315,10 @@
         <div class="header-top">
             <button id="backGroupBtn" class="back-group-btn">◀ グループ</button>
             <div class="title" id="chatTitle">グループチャット</div>
-            <div style="width: 60px;" id="headerSpacer"></div> </div>
+            <button id="notificationBtn" class="notification-btn">
+                🔔<span id="notiBadge" class="noti-badge">0</span>
+            </button>
+        </div>
         <div class="name-setter">
             <input type="text" id="nameInput" class="name-input" placeholder="あなたの名前を入力">
             <button id="saveNameBtn" class="save-name-btn">設定</button>
@@ -251,6 +333,15 @@
         
         <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力">
         <button id="sendBtn" class="send-btn">送信</button>
+    </div>
+
+    <div id="notiTray" class="noti-tray">
+        <div class="noti-header">
+            <span>新着通知履歴</span>
+            <button id="notiCloseBtn" class="noti-close-btn">閉じる ✖</button>
+        </div>
+        <div id="notiList" class="noti-list">
+            </div>
     </div>
 </div>
 
@@ -274,10 +365,8 @@
 
     let currentUserId = null;
     let currentUserName = "";
-    
-    // 現在どの部屋にいるかを管理する（最初は共通の "global_group"）
     let currentRoomId = "global_group"; 
-    let unsubscribe = null; // リアルタイム監視を解除するための変数
+    let unsubscribeChat = null;
 
     const chatLog = document.getElementById('chatLog');
     const chatInput = document.getElementById('chatInput');
@@ -287,7 +376,13 @@
     const imageInput = document.getElementById('imageInput');
     const chatTitle = document.getElementById('chatTitle');
     const backGroupBtn = document.getElementById('backGroupBtn');
-    const headerSpacer = document.getElementById('headerSpacer');
+    
+    // 通知関連の要素
+    const notificationBtn = document.getElementById('notificationBtn');
+    const notiBadge = document.getElementById('notiBadge');
+    const notiTray = document.getElementById('notiTray');
+    const notiCloseBtn = document.getElementById('notiCloseBtn');
+    const notiList = document.getElementById('notiList');
 
     function setScreenSize() {
         let vh = window.innerHeight * 0.01;
@@ -296,6 +391,10 @@
     window.addEventListener('resize', setScreenSize);
     window.addEventListener('orientationchange', setScreenSize);
     setScreenSize();
+
+    // 通知トレイの開け閉め
+    notificationBtn.addEventListener('click', () => notiTray.classList.toggle('open'));
+    notiCloseBtn.addEventListener('click', () => notiTray.classList.remove('open'));
 
     // 1. 匿名ログイン
     signInAnonymously(auth).catch((err) => alert("ログインエラー: " + err.message));
@@ -307,8 +406,8 @@
             currentUserName = savedName || "ユーザー_" + currentUserId.substring(currentUserId.length - 4);
             nameInput.value = currentUserName;
             
-            // チャットの読み込み開始
             switchRoom("global_group", "グループチャット");
+            startNotificationListener(); // 全部屋の通知監視をスタート
         }
     });
 
@@ -328,7 +427,7 @@
 
         try {
             await addDoc(collection(db, "messages"), {
-                roomId: currentRoomId, // どの部屋宛てか記録する
+                roomId: currentRoomId,
                 userId: currentUserId,
                 userName: currentUserName,
                 messageText: text,
@@ -343,7 +442,7 @@
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-    // 3. 画像送信（無料版）
+    // 3. 画像送信
     imageInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file || !currentUserId) return;
@@ -367,57 +466,42 @@
         reader.readAsDataURL(file);
     });
 
-    // 4. トーク部屋を切り替える関数
+    // 4. トーク部屋の切り替え
     function switchRoom(roomId, roomTitle) {
         currentRoomId = roomId;
         chatTitle.textContent = roomTitle;
 
-        // ボタンの表示切り替え（グループにいる時は戻るボタンを隠す）
         if (roomId === "global_group") {
             backGroupBtn.style.display = "none";
-            headerSpacer.style.display = "block";
         } else {
             backGroupBtn.style.display = "block";
-            headerSpacer.style.display = "none";
         }
 
-        // すでに前の部屋の監視が動いていたら一回止める
-        if (unsubscribe) unsubscribe();
-
-        // 画面をクリアして、新しい部屋のデータを取得
+        if (unsubscribeChat) unsubscribeChat();
         chatLog.innerHTML = "";
         startChatLiveUpdate();
     }
 
-    // グループに戻るボタンを押したとき
     backGroupBtn.addEventListener('click', () => {
         switchRoom("global_group", "グループチャット");
     });
 
-    // アイコンがタップされた時に「個人トーク」に切り替える処理
-    // 仕組み：自分のIDと相手のIDをアルファベット順に並び替えて合体させ、2人だけの専用RoomIDを作る
     function openPrivateChat(targetUserId, targetUserName) {
-        if (targetUserId === currentUserId) {
-            alert("自分との個人トークは開けません！");
-            return;
-        }
-        
+        if (targetUserId === currentUserId) return;
         const sortedIds = [currentUserId, targetUserId].sort();
         const privateRoomId = `private_${sortedIds[0]}_${sortedIds[1]}`;
-        
         switchRoom(privateRoomId, `${targetUserName} との個人トーク`);
     }
 
-    // 5. リアルタイム受信 & 既読処理
+    // 5. チャットログの同期
     function startChatLiveUpdate() {
-        // 現在の部屋（roomId）のメッセージだけを絞り込んで、時間順に並べる
         const q = query(
             collection(db, "messages"), 
             where("roomId", "==", currentRoomId),
             orderBy("timestamp", "asc")
         );
         
-        unsubscribe = onSnapshot(q, (snapshot) => {
+        unsubscribeChat = onSnapshot(q, (snapshot) => {
             chatLog.innerHTML = "";
 
             snapshot.forEach((snapshotDoc) => {
@@ -428,17 +512,14 @@
                 const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
                 const isMe = data.userId === currentUserId;
 
-                // 既読をつける処理
                 if (!isMe && (!data.readUsers || !data.readUsers.includes(currentUserId))) {
                     const docRef = doc(db, "messages", snapshotDoc.id);
                     updateDoc(docRef, { readUsers: arrayUnion(currentUserId) });
                 }
 
-                // 既読の人数カウント
                 const readCount = data.readUsers ? data.readUsers.length - 1 : 0;
                 let readText = "";
                 if (readCount > 0) {
-                    // 個人トークなら単に「既読」、グループなら「既読 2」のようにする
                     readText = currentRoomId.startsWith("private_") ? "既読" : `既読 ${readCount}`;
                 }
 
@@ -475,7 +556,6 @@
                         </div>
                     `;
                     
-                    // アイコンがクリックされたときのイベントを仕込む
                     setTimeout(() => {
                         const av = document.getElementById(`avatar-${snapshotDoc.id}`);
                         if (av) {
@@ -490,6 +570,83 @@
             });
 
             chatLog.scrollTop = chatLog.scrollHeight;
+        });
+    }
+
+    // ★新機能：全メッセージを監視して未読通知履歴を作るシステム
+    function startNotificationListener() {
+        // すべての部屋のメッセージを日付が新しい順（降順）に取得
+        const qNoti = query(collection(db, "messages"), orderBy("timestamp", "desc"));
+        
+        onSnapshot(qNoti, (snapshot) => {
+            notiList.innerHTML = "";
+            let unreadCount = 0;
+
+            snapshot.forEach((snapshotDoc) => {
+                const data = snapshotDoc.data();
+                if (!data.timestamp) return;
+
+                const isMe = data.userId === currentUserId;
+                
+                // 1. 自分宛ての個人トーク、もしくはグループチャットのメッセージか判定
+                let isForMe = false;
+                let roomLabel = "グループ";
+
+                if (data.roomId === "global_group") {
+                    isForMe = true; // グループチャットは全員向け
+                } else if (data.roomId.startsWith("private_") && data.roomId.includes(currentUserId)) {
+                    isForMe = true; // 自分が入っている個人トーク部屋
+                    roomLabel = "個人トーク";
+                }
+
+                // 自分宛て かつ 他人が送ったメッセージの場合のみ通知
+                if (isForMe && !isMe) {
+                    const hasRead = data.readUsers && data.readUsers.includes(currentUserId);
+                    
+                    // まだ読んでいなければ未読カウントを増やす
+                    if (!hasRead) unreadCount++;
+
+                    // 通知のテキストを作る（画像なら「[画像が送信されました]」）
+                    const previewText = data.type === "image" ? "[画像メッセージ]" : data.messageText;
+                    
+                    const date = data.timestamp.toDate();
+                    const timeStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+                    // 通知アイテムのHTMLを作成
+                    const notiItem = document.createElement('div');
+                    notiItem.className = "noti-item";
+                    // まだ読んでない通知は背景を少し薄黄色にする
+                    if (!hasRead) notiItem.style.backgroundColor = "#fffbeb";
+
+                    notiItem.innerHTML = `
+                        <div class="noti-meta">
+                            <span class="noti-sender">${data.userName} (${roomLabel})</span>
+                            <span>${timeStr}</span>
+                        </div>
+                        <div class="noti-text">${previewText}</div>
+                    `;
+
+                    // 通知履歴をタップした時に、その部屋へ直接ジャンプする処理！
+                    notiItem.addEventListener('click', () => {
+                        notiTray.classList.remove('open'); // 通知を閉じる
+                        if (data.roomId === "global_group") {
+                            switchRoom("global_group", "グループチャット");
+                        } else {
+                            switchRoom(data.roomId, `${data.userName} との個人トーク`);
+                        }
+                    });
+
+                    notiList.appendChild(notiItem);
+                }
+            });
+
+            // バッジの数字を更新
+            if (unreadCount > 0) {
+                notiBadge.textContent = unreadCount;
+                notiBadge.style.display = "block";
+            } else {
+                notiBadge.style.display = "none";
+            }
         });
     }
 </script>
