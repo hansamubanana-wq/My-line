@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LINE風チャット（アカウント＆既読機能付き）</title>
+    <title>LINE風チャット（名前設定＆既読機能付き）</title>
     <style>
         * {
             box-sizing: border-box;
@@ -28,14 +28,42 @@
             flex-direction: column;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
         }
+        
+        /* ヘッダー部分（名前変更機能付き） */
         .chat-header {
             background-color: #273246;
             color: #ffffff;
-            padding: 10px 15px;
-            text-align: center;
+            padding: 12px 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
         }
-        .chat-header .title { font-weight: bold; font-size: 1.1rem; }
-        .chat-header .user-info { font-size: 0.75rem; color: #ccc; margin-top: 2px; }
+        .chat-header .title { font-weight: bold; font-size: 1.05rem; }
+        .name-setter {
+            display: flex;
+            gap: 5px;
+            width: 100%;
+            max-width: 300px;
+        }
+        .name-input {
+            flex: 1;
+            padding: 4px 10px;
+            border-radius: 4px;
+            border: none;
+            font-size: 0.85rem;
+            outline: none;
+        }
+        .save-name-btn {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            font-weight: bold;
+        }
 
         .chat-log {
             flex: 1;
@@ -60,15 +88,20 @@
         .avatar {
             width: 40px;
             height: 40px;
-            background-color: #ddd;
+            background-color: #e5e7eb;
             border-radius: 50%;
             display: flex;
             justify-content: center;
             align-items: center;
             font-size: 0.75rem;
             font-weight: bold;
-            color: #555;
+            color: #4b5563;
             flex-shrink: 0;
+            border: 1px solid #ccc;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding: 2px;
         }
         .message.sent {
             align-self: flex-end;
@@ -89,7 +122,6 @@
             white-space: pre-wrap;
         }
         
-        /* 時間と既読の表示エリア */
         .status-area {
             display: flex;
             flex-direction: column;
@@ -144,7 +176,10 @@
 <div class="chat-container">
     <div class="chat-header">
         <div class="title">みんなのチャットルーム</div>
-        <div class="user-info" id="userInfo">ログイン中...</div>
+        <div class="name-setter">
+            <input type="text" id="nameInput" class="name-input" placeholder="自分の名前を入力">
+            <button id="saveNameBtn" class="save-name-btn">設定</button>
+        </div>
     </div>
     <div class="chat-log" id="chatLog"></div>
     <div class="chat-footer">
@@ -177,20 +212,37 @@
     const chatLog = document.getElementById('chatLog');
     const chatInput = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendBtn');
-    const userInfo = document.getElementById('userInfo');
+    const nameInput = document.getElementById('nameInput');
+    const saveNameBtn = document.getElementById('saveNameBtn');
 
-    // 1. 【アカウント機能】匿名ログインを実行
+    // 1. 匿名ログイン
     signInAnonymously(auth).catch((error) => console.error("ログインエラー:", error));
 
     onAuthStateChanged(auth, (user) => {
         if (user) {
             currentUserId = user.uid;
-            // ユーザー名をIDの後ろ4桁にして分かりやすくする（例：ユーザー_abcd）
-            currentUserName = "ユーザー_" + currentUserId.substring(currentUserId.length - 4);
-            userInfo.textContent = `あなた: ${currentUserName}`;
             
-            // ログインが完了したらメッセージの読み込みを開始
+            // ローカルストレージ（ブラウザの記憶機能）に保存された名前があればそれを使う
+            const savedName = localStorage.getItem('chat_user_name');
+            if (savedName) {
+                currentUserName = savedName;
+            } else {
+                currentUserName = "ユーザー_" + currentUserId.substring(currentUserId.length - 4);
+            }
+            
+            nameInput.value = currentUserName;
             startChatLiveUpdate();
+        }
+    });
+
+    // 名前の保存処理
+    saveNameBtn.addEventListener('click', () => {
+        const inputName = nameInput.value.trim();
+        if (inputName !== "") {
+            currentUserName = inputName;
+            localStorage.setItem('chat_user_name', inputName); // ブラウザに名前を記憶させる
+            alert("名前を「" + inputName + "」に設定したよ！");
+            startChatLiveUpdate(); // 画面の表示を更新
         }
     });
 
@@ -202,14 +254,15 @@
         try {
             await addDoc(collection(db, "messages"), {
                 userId: currentUserId,
-                userName: currentUserName,
+                userName: currentUserName, // 設定した名前で送信されるよ
                 messageText: text,
                 timestamp: serverTimestamp(),
-                readUsers: [currentUserId] // 【既読機能】送った本人は最初から既読にする
+                readUsers: [currentUserId]
             });
             chatInput.value = "";
         } catch (error) {
             console.error("送信エラー: ", error);
+            alert("送信に失敗しちゃった。Firebaseの設定を確認してみてね。");
         }
     }
 
@@ -218,7 +271,7 @@
         if (e.key === 'Enter') sendMessage();
     });
 
-    // 3. チャットのリアルタイム受信と【既読機能】の処理
+    // 3. リアルタイム同期
     function startChatLiveUpdate() {
         const q = query(collection(db, "messages"), orderBy("timestamp", "asc"));
         
@@ -233,8 +286,6 @@
                 const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
                 const isMe = data.userId === currentUserId;
 
-                // 【既読機能のロジック】
-                // 自分以外のメッセージで、まだ自分が既読をつけていなければ、データベースを更新して自分を既読に追加する
                 if (!isMe && (!data.readUsers || !data.readUsers.includes(currentUserId))) {
                     const docRef = doc(db, "messages", snapshotDoc.id);
                     updateDoc(docRef, {
@@ -242,9 +293,7 @@
                     });
                 }
 
-                // 自分以外の既読人数を計算（送った本人を除く既読がついた数）
                 const readCount = data.readUsers ? data.readUsers.length - 1 : 0;
-                // 1人でも読んだら「既読」、複数人なら「既読 2」のようにする
                 const readText = readCount > 0 ? (readCount === 1 ? "既読" : `既読 ${readCount}`) : "";
 
                 let messageHtml = "";
@@ -259,10 +308,12 @@
                         </div>
                     `;
                 } else {
-                    const shortName = data.userName ? data.userName.substring(data.userName.length - 2) : "他";
+                    // 相手のアイコン用の名前（最初の2文字を表示）
+                    const displayName = data.userName || "他";
+                    const shortName = displayName.substring(0, 2);
                     messageHtml = `
                         <div class="message received">
-                            <div class="avatar">${shortName}</div>
+                            <div class="avatar" title="${displayName}">${shortName}</div>
                             <div class="bubble">${data.messageText}</div>
                             <div class="status-area">
                                 <span class="time">${timeStr}</span>
