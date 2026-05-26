@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LINE風チャット（名前設定＆既読機能付き）</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LINE風高機能チャット</title>
     <style>
         * {
             box-sizing: border-box;
@@ -17,39 +17,41 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
+            overflow: hidden;
         }
+
+        /* レスポンシブ対応コンテナ（スマホなら全画面、PCならスマホサイズ） */
         .chat-container {
             width: 100%;
-            max-width: 450px;
+            max-width: 480px;
             height: 100vh;
-            max-height: 800px;
             background-color: #7494c0;
             display: flex;
             flex-direction: column;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
         }
-        
-        /* ヘッダー部分（名前変更機能付き） */
+
+        /* ヘッダー */
         .chat-header {
             background-color: #273246;
             color: #ffffff;
-            padding: 12px 15px;
+            padding: 10px 15px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
+            z-index: 10;
         }
         .chat-header .title { font-weight: bold; font-size: 1.05rem; }
         .name-setter {
             display: flex;
             gap: 5px;
             width: 100%;
-            max-width: 300px;
         }
         .name-input {
             flex: 1;
-            padding: 4px 10px;
-            border-radius: 4px;
+            padding: 6px 12px;
+            border-radius: 20px;
             border: none;
             font-size: 0.85rem;
             outline: none;
@@ -58,13 +60,14 @@
             background-color: #3b82f6;
             color: white;
             border: none;
-            padding: 4px 10px;
-            border-radius: 4px;
+            padding: 6px 15px;
+            border-radius: 20px;
             font-size: 0.85rem;
             cursor: pointer;
             font-weight: bold;
         }
 
+        /* トーク履歴エリア */
         .chat-log {
             flex: 1;
             overflow-y: auto;
@@ -72,37 +75,53 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
+            -webkit-overflow-scrolling: touch; /* iOSのスクロールを滑らかに */
         }
+
+        /* メッセージ共通 */
         .message {
             display: flex;
             align-items: flex-end;
-            max-width: 75%;
+            max-width: 85%;
         }
+
+        /* 相手のメッセージ */
         .message.received { align-self: flex-start; }
+        .message.received .bubble-wrapper { margin-left: 8px; }
         .message.received .bubble {
             background-color: #ffffff;
             color: #000000;
             border-radius: 15px 15px 15px 0;
-            margin-left: 10px;
         }
+
+        /* アイコン画像（グラデーション背景＋名前の頭文字） */
         .avatar {
             width: 40px;
             height: 40px;
-            background-color: #e5e7eb;
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
             border-radius: 50%;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             font-weight: bold;
-            color: #4b5563;
+            color: #333333;
             flex-shrink: 0;
-            border: 1px solid #ccc;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            padding: 2px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+
+        .bubble-wrapper {
+            display: flex;
+            flex-direction: column;
+        }
+        .user-name-label {
+            font-size: 0.7rem;
+            color: #e0e0e0;
+            margin-bottom: 3px;
+            margin-left: 2px;
+        }
+
+        /* 自分のメッセージ */
         .message.sent {
             align-self: flex-end;
             flex-direction: row-reverse;
@@ -111,22 +130,34 @@
             background-color: #85e249;
             color: #000000;
             border-radius: 15px 15px 0 15px;
-            margin-right: 10px;
+            margin-right: 8px;
         }
+
+        /* 吹き出し */
         .bubble {
             padding: 10px 14px;
             font-size: 0.95rem;
             line-height: 1.4;
             word-break: break-all;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.15);
             white-space: pre-wrap;
         }
-        
+
+        /* 送信された画像 */
+        .sent-image {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 10px;
+            display: block;
+            cursor: pointer;
+        }
+
+        /* ステータス（既読・時間） */
         .status-area {
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            margin: 0 5px;
+            margin: 0 4px;
         }
         .message.received .status-area { align-items: flex-start; }
         
@@ -135,21 +166,38 @@
             color: #e2ffc9;
             font-weight: bold;
             margin-bottom: 2px;
+            min-height: 12px;
         }
         .time {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: #ffffff;
             white-space: nowrap;
             opacity: 0.8;
         }
 
+        /* フッター（入力・画像選択） */
         .chat-footer {
             background-color: #ffffff;
             padding: 10px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+            padding-bottom: calc(10px + env(safe-area-inset-bottom)); /* iPhoneのノッチ対応 */
         }
+        
+        /* 画像選択クリップボタン */
+        .image-send-label {
+            cursor: pointer;
+            padding: 5px;
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #7494c0;
+        }
+        .image-send-label:hover { color: #273246; }
+        #imageInput { display: none; }
+
         .chat-input {
             flex: 1;
             border: none;
@@ -175,14 +223,19 @@
 
 <div class="chat-container">
     <div class="chat-header">
-        <div class="title">みんなのチャットルーム</div>
+        <div class="title">グループチャット</div>
         <div class="name-setter">
-            <input type="text" id="nameInput" class="name-input" placeholder="自分の名前を入力">
+            <input type="text" id="nameInput" class="name-input" placeholder="あなたの名前を入力">
             <button id="saveNameBtn" class="save-name-btn">設定</button>
         </div>
     </div>
+    
     <div class="chat-log" id="chatLog"></div>
+    
     <div class="chat-footer">
+        <label for="imageInput" class="image-send-label">📎</label>
+        <input type="file" id="imageInput" accept="image/*">
+        
         <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力">
         <button id="sendBtn" class="send-btn">送信</button>
     </div>
@@ -192,6 +245,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyCbFEZH9VywEFumJRbbqPftEJAZJDb8hQ0",
@@ -205,6 +259,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
+    const storage = getStorage(app);
 
     let currentUserId = null;
     let currentUserName = "";
@@ -214,39 +269,31 @@
     const sendBtn = document.getElementById('sendBtn');
     const nameInput = document.getElementById('nameInput');
     const saveNameBtn = document.getElementById('saveNameBtn');
+    const imageInput = document.getElementById('imageInput');
 
     // 1. 匿名ログイン
-    signInAnonymously(auth).catch((error) => console.error("ログインエラー:", error));
+    signInAnonymously(auth).catch((err) => alert("ログインエラー: " + err.message));
 
     onAuthStateChanged(auth, (user) => {
         if (user) {
             currentUserId = user.uid;
-            
-            // ローカルストレージ（ブラウザの記憶機能）に保存された名前があればそれを使う
             const savedName = localStorage.getItem('chat_user_name');
-            if (savedName) {
-                currentUserName = savedName;
-            } else {
-                currentUserName = "ユーザー_" + currentUserId.substring(currentUserId.length - 4);
-            }
-            
+            currentUserName = savedName || "ユーザー_" + currentUserId.substring(currentUserId.length - 4);
             nameInput.value = currentUserName;
             startChatLiveUpdate();
         }
     });
 
-    // 名前の保存処理
     saveNameBtn.addEventListener('click', () => {
         const inputName = nameInput.value.trim();
         if (inputName !== "") {
             currentUserName = inputName;
-            localStorage.setItem('chat_user_name', inputName); // ブラウザに名前を記憶させる
+            localStorage.setItem('chat_user_name', inputName);
             alert("名前を「" + inputName + "」に設定したよ！");
-            startChatLiveUpdate(); // 画面の表示を更新
         }
     });
 
-    // 2. メッセージ送信処理
+    // 2. メッセージ送信（文字）
     async function sendMessage() {
         const text = chatInput.value.trim();
         if (text === "" || !currentUserId) return;
@@ -254,24 +301,47 @@
         try {
             await addDoc(collection(db, "messages"), {
                 userId: currentUserId,
-                userName: currentUserName, // 設定した名前で送信されるよ
+                userName: currentUserName,
                 messageText: text,
+                type: "text", // メッセージのタイプを指定
                 timestamp: serverTimestamp(),
                 readUsers: [currentUserId]
             });
             chatInput.value = "";
-        } catch (error) {
-            console.error("送信エラー: ", error);
-            alert("送信に失敗しちゃった。Firebaseの設定を確認してみてね。");
-        }
+        } catch (err) { alert("送信失敗: " + err.message); }
     }
 
     sendBtn.addEventListener('click', sendMessage);
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
+    chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+    // 3. 画像のアップロードと送信
+    imageInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file || !currentUserId) return;
+
+        // 一意のファイル名を作成
+        const storageRef = ref(storage, 'images/' + Date.now() + '_' + file.name);
+        
+        try {
+            // クリップアイコンが押されて画像が選ばれたらStorageへ保存
+            const snapshot = await uploadBytes(storageRef, file);
+            // 画像のURLを取得
+            const imageUrl = await getDownloadURL(snapshot.ref);
+
+            // データベースに画像メッセージとして追加
+            await addDoc(collection(db, "messages"), {
+                userId: currentUserId,
+                userName: currentUserName,
+                imageUrl: imageUrl,
+                type: "image", // メッセージのタイプを指定
+                timestamp: serverTimestamp(),
+                readUsers: [currentUserId]
+            });
+            imageInput.value = ""; // リセット
+        } catch (err) { alert("画像送信失敗: " + err.message); }
     });
 
-    // 3. リアルタイム同期
+    // 4. リアルタイム受信 & 既読処理
     function startChatLiveUpdate() {
         const q = query(collection(db, "messages"), orderBy("timestamp", "asc"));
         
@@ -286,21 +356,30 @@
                 const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
                 const isMe = data.userId === currentUserId;
 
+                // 既読をつける処理
                 if (!isMe && (!data.readUsers || !data.readUsers.includes(currentUserId))) {
                     const docRef = doc(db, "messages", snapshotDoc.id);
-                    updateDoc(docRef, {
-                        readUsers: arrayUnion(currentUserId)
-                    });
+                    updateDoc(docRef, { readUsers: arrayUnion(currentUserId) });
                 }
 
+                // 既読の人数カウント
                 const readCount = data.readUsers ? data.readUsers.length - 1 : 0;
+                // 3人以上のグループなら「既読 2」のように数字が出るようにする
                 const readText = readCount > 0 ? (readCount === 1 ? "既読" : `既読 ${readCount}`) : "";
+
+                // 中身がテキストか画像かで表示を分ける
+                let contentHtml = "";
+                if (data.type === "image" || data.imageUrl) {
+                    contentHtml = `<img src="${data.imageUrl}" class="sent-image" alt="画像">`;
+                } else {
+                    contentHtml = data.messageText;
+                }
 
                 let messageHtml = "";
                 if (isMe) {
                     messageHtml = `
                         <div class="message sent">
-                            <div class="bubble">${data.messageText}</div>
+                            <div class="bubble">${contentHtml}</div>
                             <div class="status-area">
                                 <span class="read-status">${readText}</span>
                                 <span class="time">${timeStr}</span>
@@ -308,13 +387,15 @@
                         </div>
                     `;
                 } else {
-                    // 相手のアイコン用の名前（最初の2文字を表示）
                     const displayName = data.userName || "他";
                     const shortName = displayName.substring(0, 2);
                     messageHtml = `
                         <div class="message received">
                             <div class="avatar" title="${displayName}">${shortName}</div>
-                            <div class="bubble">${data.messageText}</div>
+                            <div class="bubble-wrapper">
+                                <span class="user-name-label">${displayName}</span>
+                                <div class="bubble">${contentHtml}</div>
+                            </div>
                             <div class="status-area">
                                 <span class="time">${timeStr}</span>
                             </div>
