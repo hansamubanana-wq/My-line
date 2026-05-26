@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LINE風高機能チャット</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>LINE風チャット（横画面＆無料画像送信対応）</title>
     <style>
         * {
             box-sizing: border-box;
@@ -16,19 +16,21 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            /* iPadの見切れ対策：JSで計算した高さを適用 */
+            height: calc(var(--vh, 1vh) * 100);
             overflow: hidden;
         }
 
-        /* レスポンシブ対応コンテナ（スマホなら全画面、PCならスマホサイズ） */
+        /* レスポンシブコンテナ */
         .chat-container {
             width: 100%;
-            max-width: 480px;
-            height: 100vh;
+            max-width: 500px;
+            height: 100%;
             background-color: #7494c0;
             display: flex;
             flex-direction: column;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            position: relative;
         }
 
         /* ヘッダー */
@@ -75,17 +77,15 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
-            -webkit-overflow-scrolling: touch; /* iOSのスクロールを滑らかに */
+            -webkit-overflow-scrolling: touch;
         }
 
-        /* メッセージ共通 */
+        /* メッセージスタイル */
         .message {
             display: flex;
             align-items: flex-end;
             max-width: 85%;
         }
-
-        /* 相手のメッセージ */
         .message.received { align-self: flex-start; }
         .message.received .bubble-wrapper { margin-left: 8px; }
         .message.received .bubble {
@@ -93,8 +93,6 @@
             color: #000000;
             border-radius: 15px 15px 15px 0;
         }
-
-        /* アイコン画像（グラデーション背景＋名前の頭文字） */
         .avatar {
             width: 40px;
             height: 40px;
@@ -109,7 +107,6 @@
             flex-shrink: 0;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-
         .bubble-wrapper {
             display: flex;
             flex-direction: column;
@@ -120,8 +117,6 @@
             margin-bottom: 3px;
             margin-left: 2px;
         }
-
-        /* 自分のメッセージ */
         .message.sent {
             align-self: flex-end;
             flex-direction: row-reverse;
@@ -132,8 +127,6 @@
             border-radius: 15px 15px 0 15px;
             margin-right: 8px;
         }
-
-        /* 吹き出し */
         .bubble {
             padding: 10px 14px;
             font-size: 0.95rem;
@@ -143,16 +136,16 @@
             white-space: pre-wrap;
         }
 
-        /* 送信された画像 */
+        /* 画像表示 */
         .sent-image {
             max-width: 100%;
-            max-height: 200px;
+            max-height: 180px;
             border-radius: 10px;
             display: block;
-            cursor: pointer;
+            margin-top: 2px;
         }
 
-        /* ステータス（既読・時間） */
+        /* ステータス */
         .status-area {
             display: flex;
             flex-direction: column;
@@ -160,7 +153,6 @@
             margin: 0 4px;
         }
         .message.received .status-area { align-items: flex-start; }
-        
         .read-status {
             font-size: 0.65rem;
             color: #e2ffc9;
@@ -175,34 +167,28 @@
             opacity: 0.8;
         }
 
-        /* フッター（入力・画像選択） */
+        /* 新・LINE風フッター（見切れ防止を強化） */
         .chat-footer {
-            background-color: #ffffff;
-            padding: 10px;
+            background-color: #f7f7f7;
+            padding: 8px 10px;
             display: flex;
             align-items: center;
             gap: 8px;
-            padding-bottom: calc(10px + env(safe-area-inset-bottom)); /* iPhoneのノッチ対応 */
+            border-top: 1px solid #ddd;
+            padding-bottom: calc(8px + env(safe-area-inset-bottom));
         }
-        
-        /* 画像選択クリップボタン */
         .image-send-label {
             cursor: pointer;
             padding: 5px;
-            font-size: 1.4rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #7494c0;
+            font-size: 1.3rem;
+            color: #666;
         }
-        .image-send-label:hover { color: #273246; }
         #imageInput { display: none; }
-
         .chat-input {
             flex: 1;
-            border: none;
-            background-color: #f0f0f0;
-            padding: 10px 15px;
+            border: 1px solid #ccc;
+            background-color: #ffffff;
+            padding: 8px 14px;
             border-radius: 20px;
             font-size: 0.95rem;
             outline: none;
@@ -211,11 +197,11 @@
             background-color: #53b63e;
             color: white;
             border: none;
-            padding: 8px 15px;
+            padding: 7px 14px;
             border-radius: 20px;
             font-weight: bold;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }
     </style>
 </head>
@@ -245,7 +231,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyCbFEZH9VywEFumJRbbqPftEJAZJDb8hQ0",
@@ -259,7 +244,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
-    const storage = getStorage(app);
 
     let currentUserId = null;
     let currentUserName = "";
@@ -270,6 +254,15 @@
     const nameInput = document.getElementById('nameInput');
     const saveNameBtn = document.getElementById('saveNameBtn');
     const imageInput = document.getElementById('imageInput');
+
+    // iPad用の正確な画面高さ計算の仕組み
+    function setScreenSize() {
+        let vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+    window.addEventListener('resize', setScreenSize);
+    window.addEventListener('orientationchange', setScreenSize);
+    setScreenSize();
 
     // 1. 匿名ログイン
     signInAnonymously(auth).catch((err) => alert("ログインエラー: " + err.message));
@@ -303,7 +296,7 @@
                 userId: currentUserId,
                 userName: currentUserName,
                 messageText: text,
-                type: "text", // メッセージのタイプを指定
+                type: "text",
                 timestamp: serverTimestamp(),
                 readUsers: [currentUserId]
             });
@@ -314,31 +307,28 @@
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-    // 3. 画像のアップロードと送信
-    imageInput.addEventListener('change', async (e) => {
+    // 3. 画像送信（Storageを使わず、文字データとしてFirestoreに直で保存するから無料！）
+    imageInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file || !currentUserId) return;
 
-        // 一意のファイル名を作成
-        const storageRef = ref(storage, 'images/' + Date.now() + '_' + file.name);
-        
-        try {
-            // クリップアイコンが押されて画像が選ばれたらStorageへ保存
-            const snapshot = await uploadBytes(storageRef, file);
-            // 画像のURLを取得
-            const imageUrl = await getDownloadURL(snapshot.ref);
+        const reader = new FileReader();
+        reader.onload = async function(event) {
+            const base64Data = event.target.result; // 画像をテキスト化したデータ
 
-            // データベースに画像メッセージとして追加
-            await addDoc(collection(db, "messages"), {
-                userId: currentUserId,
-                userName: currentUserName,
-                imageUrl: imageUrl,
-                type: "image", // メッセージのタイプを指定
-                timestamp: serverTimestamp(),
-                readUsers: [currentUserId]
-            });
-            imageInput.value = ""; // リセット
-        } catch (err) { alert("画像送信失敗: " + err.message); }
+            try {
+                await addDoc(collection(db, "messages"), {
+                    userId: currentUserId,
+                    userName: currentUserName,
+                    imageUrl: base64Data, // ここに文字化した画像データを入れる
+                    type: "image",
+                    timestamp: serverTimestamp(),
+                    readUsers: [currentUserId]
+                });
+                imageInput.value = "";
+            } catch (err) { alert("画像送信失敗: " + err.message); }
+        };
+        reader.readAsDataURL(file); // 画像をテキストに変換開始
     });
 
     // 4. リアルタイム受信 & 既読処理
@@ -356,18 +346,14 @@
                 const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
                 const isMe = data.userId === currentUserId;
 
-                // 既読をつける処理
                 if (!isMe && (!data.readUsers || !data.readUsers.includes(currentUserId))) {
                     const docRef = doc(db, "messages", snapshotDoc.id);
                     updateDoc(docRef, { readUsers: arrayUnion(currentUserId) });
                 }
 
-                // 既読の人数カウント
                 const readCount = data.readUsers ? data.readUsers.length - 1 : 0;
-                // 3人以上のグループなら「既読 2」のように数字が出るようにする
                 const readText = readCount > 0 ? (readCount === 1 ? "既読" : `既読 ${readCount}`) : "";
 
-                // 中身がテキストか画像かで表示を分ける
                 let contentHtml = "";
                 if (data.type === "image" || data.imageUrl) {
                     contentHtml = `<img src="${data.imageUrl}" class="sent-image" alt="画像">`;
