@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>LINE風高機能チャット（トーク名変更対応）</title>
+    <title>LINE風完全版チャット（メンバー一覧＆ログイン同期対応）</title>
     <style>
         * {
             box-sizing: border-box;
@@ -43,10 +43,12 @@
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.2s ease;
+            z-index: 1;
         }
         .screen.active {
             opacity: 1;
             pointer-events: auto;
+            z-index: 2;
         }
 
         /* ヘッダー */
@@ -68,10 +70,6 @@
         .header .title {
             font-weight: bold;
             font-size: 1.1rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 240px;
         }
         
         .back-btn {
@@ -83,62 +81,47 @@
             font-size: 0.8rem;
             cursor: pointer;
         }
+        .menu-btn { background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer; }
+        .logout-btn { background: none; border: none; color: #ff9a9e; font-size: 0.8rem; cursor: pointer; }
 
-        /* 部屋の名前変更などをするメニュー三点リーダーボタン */
-        .menu-btn {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 1.2rem;
-            cursor: pointer;
-            padding: 0 5px;
-        }
-
-        .settings-row {
+        /* タブバー（LINE風の画面下部切り替え） */
+        .tab-bar {
             display: flex;
-            gap: 5px;
-            width: 100%;
+            border-top: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+            padding-bottom: env(safe-area-inset-bottom);
         }
-        .header-input {
+        .tab-item {
             flex: 1;
-            padding: 6px 12px;
-            border-radius: 20px;
-            border: none;
+            text-align: center;
+            padding: 12px 0;
             font-size: 0.85rem;
-            outline: none;
-            background-color: #ffffff;
-            color: #333;
-        }
-        .room-input { background-color: #e2e8f0; }
-        .header-btn {
-            background-color: #3b82f6;
-            color: white;
-            border: none;
-            padding: 6px 15px;
-            border-radius: 20px;
-            font-size: 0.85rem;
+            color: #6b7280;
             cursor: pointer;
             font-weight: bold;
         }
-        .room-btn { background-color: #10b981; }
+        .tab-item.active {
+            color: #3b82f6;
+        }
 
-        /* --- トーク一覧画面 --- */
-        .room-list {
+        /* リストの共通スタイル */
+        .list-content {
             flex: 1;
             overflow-y: auto;
             background-color: #ffffff;
         }
-        .room-item {
+        .list-item {
             display: flex;
             align-items: center;
             padding: 15px;
             border-bottom: 1px solid #f3f4f6;
             cursor: pointer;
         }
-        .room-item:active { background-color: #f9fafb; }
-        .room-icon {
-            width: 50px;
-            height: 50px;
+        .list-item:active { background-color: #f9fafb; }
+        
+        .item-icon {
+            width: 45px;
+            height: 45px;
             border-radius: 50%;
             background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
             display: flex;
@@ -146,36 +129,58 @@
             align-items: center;
             font-weight: bold;
             color: #333;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             margin-right: 15px;
             flex-shrink: 0;
         }
-        .room-info {
-            flex: 1;
+        .item-info { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .item-name { font-weight: bold; font-size: 0.95rem; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .item-sub { font-size: 0.8rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .room-badge { background-color: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; padding: 2px 7px; border-radius: 10px; margin-left: 10px; }
+
+        /* --- ログイン画面のスタイル --- */
+        #authScreen {
+            background-color: #273246;
+            justify-content: center;
+            align-items: center;
+            padding: 30px;
+            color: white;
+        }
+        .auth-box {
+            width: 100%;
             display: flex;
             flex-direction: column;
-            gap: 4px;
-            min-width: 0;
+            gap: 15px;
         }
-        .room-name { font-weight: bold; font-size: 0.95rem; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .room-last-msg {
-            font-size: 0.8rem;
-            color: #6b7280;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+        .auth-box h2 { text-align: center; margin-bottom: 10px; font-size: 1.5rem; }
+        .auth-input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            outline: none;
+            font-size: 0.95rem;
         }
-        .room-badge {
-            background-color: #ef4444;
+        .auth-btn {
+            background-color: #53b63e;
             color: white;
-            font-size: 0.7rem;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 1rem;
             font-weight: bold;
-            padding: 2px 7px;
-            border-radius: 10px;
-            margin-left: 10px;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+        .auth-toggle {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #cbd5e1;
+            cursor: pointer;
+            text-decoration: underline;
         }
 
-        /* --- トークルーム画面 --- */
+        /* --- トークルーム画面のスタイル --- */
         #roomScreen { background-color: #7494c0; }
         .chat-log {
             flex: 1;
@@ -205,7 +210,6 @@
             color: #333;
             flex-shrink: 0;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            cursor: pointer;
         }
         .bubble-wrapper { display: flex; flex-direction: column; }
         .user-name-label { font-size: 0.7rem; color: #e0e0e0; margin-bottom: 3px; margin-left: 2px; }
@@ -221,7 +225,6 @@
         .read-status { font-size: 0.65rem; color: #e2ffc9; font-weight: bold; margin-bottom: 2px; min-height: 12px; }
         .time { font-size: 0.65rem; color: #ffffff; white-space: nowrap; opacity: 0.8; }
 
-        /* フッター */
         .chat-footer {
             background-color: #f7f7f7;
             padding: 8px 10px;
@@ -235,33 +238,65 @@
         #imageInput { display: none; }
         .chat-input { flex: 1; border: 1px solid #ccc; background-color: #ffffff; padding: 8px 14px; border-radius: 20px; font-size: 0.95rem; outline: none; }
         .send-btn { background-color: #53b63e; color: white; border: none; padding: 7px 14px; border-radius: 20px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+        
+        /* 部屋作成フォーム */
+        .create-room-box { padding: 10px 15px; display: flex; gap: 5px; background-color: #f3f4f6; border-bottom: 1px solid #e5e7eb; }
+        .room-create-input { flex: 1; padding: 6px 12px; border-radius: 20px; border: 1px solid #ccc; font-size: 0.85rem; outline: none; }
+        .room-create-btn { background-color: #10b981; color: white; border: none; padding: 6px 15px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="chat-container">
     
-    <div id="listScreen" class="screen active">
+    <div id="authScreen" class="screen active">
+        <div class="auth-box">
+            <h2 id="authTitle">ログイン</h2>
+            <input type="text" id="authName" class="auth-input" placeholder="あなたの名前（新規登録時のみ必須）">
+            <input type="email" id="authEmail" class="auth-input" placeholder="メールアドレス">
+            <input type="password" id="authPassword" class="auth-input" placeholder="パスワード（6文字以上）">
+            <button id="authBtn" class="auth-btn">ログインする</button>
+            <div id="authToggle" class="auth-toggle">アカウントを持っていない場合は新規登録</div>
+        </div>
+    </div>
+
+    <div id="memberScreen" class="screen">
+        <div class="header">
+            <div class="header-top">
+                <div class="title" id="memberMainTitle">友だち</div>
+                <button class="logout-btn" id="logoutBtn1">ログアウト</button>
+            </div>
+        </div>
+        <div class="list-content" id="memberList">
+            </div>
+        <div class="tab-bar">
+            <div class="tab-item active" id="tabMember">友だち</div>
+            <div class="tab-item" id="tabTalk">トーク</div>
+        </div>
+    </div>
+
+    <div id="listScreen" class="screen">
         <div class="header">
             <div class="header-top">
                 <div class="title">トーク</div>
-            </div>
-            <div class="settings-row">
-                <input type="text" id="nameInput" class="header-input" placeholder="あなたの名前を入力">
-                <button id="saveNameBtn" class="header-btn">設定</button>
-            </div>
-            <div class="settings-row">
-                <input type="text" id="roomInput" class="header-input room-input" placeholder="合言葉を入れると新しいグループを作成">
-                <button id="saveRoomBtn" class="header-btn room-btn">作成・参加</button>
+                <button class="logout-btn" id="logoutBtn2">ログアウト</button>
             </div>
         </div>
-        <div class="room-list" id="roomList"></div>
+        <div class="create-room-box">
+            <input type="text" id="roomInput" class="room-create-input" placeholder="合言葉を入れると新しいグループを作成">
+            <button id="saveRoomBtn" class="room-create-btn">作成</button>
+        </div>
+        <div class="list-content" id="roomList"></div>
+        <div class="tab-bar">
+            <div class="tab-item" id="tabMember2">友だち</div>
+            <div class="tab-item active" id="tabTalk2">トーク</div>
+        </div>
     </div>
 
     <div id="roomScreen" class="screen">
         <div class="header">
             <div class="header-top">
-                <button id="backBtn" class="back-btn">◀ トーク一覧</button>
+                <button id="backBtn" class="back-btn">◀ 戻る</button>
                 <div class="title" id="chatTitle">グループチャット</div>
                 <button id="menuBtn" class="menu-btn">︙</button>
             </div>
@@ -279,8 +314,8 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion, where, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyCbFEZH9VywEFumJRbbqPftEJAZJDb8hQ0",
@@ -298,25 +333,38 @@
     let currentUserId = null;
     let currentUserName = "";
     let currentRoomId = "global_group"; 
+    let isSignUpMode = false; // ログインか新規登録かの切り替えフラグ
     
     let unsubscribeChat = null;
     let allMessages = []; 
 
-    // 画面要素
-    const listScreen = document.getElementById('listScreen');
-    const roomScreen = document.getElementById('roomScreen');
+    // 各種画面要素
+    const screens = {
+        auth: document.getElementById('authScreen'),
+        member: document.getElementById('memberScreen'),
+        list: document.getElementById('listScreen'),
+        room: document.getElementById('roomScreen')
+    };
+
+    const authTitle = document.getElementById('authTitle');
+    const authName = document.getElementById('authName');
+    const authEmail = document.getElementById('authEmail');
+    const authPassword = document.getElementById('authPassword');
+    const authBtn = document.getElementById('authBtn');
+    const authToggle = document.getElementById('authToggle');
+
+    const memberList = document.getElementById('memberList');
     const roomList = document.getElementById('roomList');
     const chatLog = document.getElementById('chatLog');
     const chatInput = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendBtn');
-    const nameInput = document.getElementById('nameInput');
-    const saveNameBtn = document.getElementById('saveNameBtn');
     const roomInput = document.getElementById('roomInput');
     const saveRoomBtn = document.getElementById('saveRoomBtn');
     const imageInput = document.getElementById('imageInput');
     const chatTitle = document.getElementById('chatTitle');
     const backBtn = document.getElementById('backBtn');
     const menuBtn = document.getElementById('menuBtn');
+    const memberMainTitle = document.getElementById('memberMainTitle');
 
     function setScreenSize() {
         let vh = window.innerHeight * 0.01;
@@ -326,30 +374,116 @@
     window.addEventListener('orientationchange', setScreenSize);
     setScreenSize();
 
-    // 1. 匿名ログイン
-    signInAnonymously(auth).catch((err) => alert("ログインエラー: " + err.message));
+    // 画面切り替え関数
+    function showScreen(screenKey) {
+        Object.keys(screens).forEach(key => {
+            if(key === screenKey) screens[key].classList.add('active');
+            else screens[key].classList.remove('active');
+        });
+    }
 
-    onAuthStateChanged(auth, (user) => {
+    // LINE風タブバーのイベント
+    document.getElementById('tabTalk').addEventListener('click', () => showScreen('list'));
+    document.getElementById('tabMember2').addEventListener('click', () => showScreen('member'));
+
+    // --- 認証（ログイン・新規登録）まわりの処理 ---
+    authToggle.addEventListener('click', () => {
+        isSignUpMode = !isSignUpMode;
+        if(isSignUpMode) {
+            authTitle.textContent = "新規登録";
+            authName.style.display = "block";
+            authBtn.textContent = "登録して始める";
+            authToggle.textContent = "すでにアカウントをお持ちの場合はログイン";
+        } else {
+            authTitle.textContent = "ログイン";
+            authName.style.display = "none";
+            authBtn.textContent = "ログインする";
+            authToggle.textContent = "アカウントを持っていない場合は新規登録";
+        }
+    });
+
+    authBtn.addEventListener('click', async () => {
+        const email = authEmail.value.trim();
+        const password = authPassword.value;
+        const name = authName.value.trim();
+
+        if(!email || !password) { alert("メールアドレスとパスワードを入力してね！"); return; }
+
+        if(isSignUpMode) {
+            if(!name) { alert("お名前を入力してください！"); return; }
+            try {
+                const res = await createUserWithEmailAndPassword(auth, email, password);
+                // 登録成功したら、Firestoreの「users」コレクションにユーザー情報を保存
+                await setDoc(doc(db, "users", res.user.uid), {
+                    uid: res.user.uid,
+                    name: name,
+                    email: email
+                });
+                alert("新しくアカウントを作ったよ！");
+            } catch(err) { alert("登録エラー: " + err.message); }
+        } else {
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch(err) { alert("ログインエラー: " + err.message); }
+        }
+    });
+
+    // ログアウト処理
+    const logout = () => { signOut(auth); localStorage.clear(); location.reload(); };
+    document.getElementById('logoutBtn1').addEventListener('click', logout);
+    document.getElementById('logoutBtn2').addEventListener('click', logout);
+
+    // 認証状態の監視
+    onAuthStateChanged(auth, async (user) => {
         if (user) {
             currentUserId = user.uid;
-            const savedName = localStorage.getItem('chat_user_name');
-            currentUserName = savedName || "ユーザー_" + currentUserId.substring(currentUserId.length - 4);
-            nameInput.value = currentUserName;
+            // データベースからログインした人の名前を取得
+            const userDoc = await getDoc(doc(db, "users", currentUserId));
+            if(userDoc.exists()) {
+                currentUserName = userDoc.data().name;
+            } else {
+                currentUserName = "名無しさん";
+            }
+            memberMainTitle.textContent = `友だち (${currentUserName})`;
+            showScreen('member');
             
-            startGlobalListener();
+            startGlobalListener(); // メッセージ監視
+            startMemberListListener(); // 参加者一覧監視
+        } else {
+            showScreen('auth');
+            authName.style.display = "none";
         }
     });
 
-    saveNameBtn.addEventListener('click', () => {
-        const inputName = nameInput.value.trim();
-        if (inputName !== "") {
-            currentUserName = inputName;
-            localStorage.setItem('chat_user_name', inputName);
-            alert("名前を「" + inputName + "」に設定したよ！");
-            renderRoomList();
-        }
-    });
+    // ★新機能：参加メンバー（ユーザー）一覧を取得して描画する
+    function startMemberListListener() {
+        onSnapshot(collection(db, "users"), (snapshot) => {
+            memberList.innerHTML = "";
+            snapshot.forEach((userDoc) => {
+                const uData = userDoc.data();
+                if(uData.uid === currentUserId) return; // 自分は一覧に出さない
 
+                const item = document.createElement('div');
+                item.className = "list-item";
+                const shortName = uData.name.substring(0, 2);
+
+                item.innerHTML = `
+                    <div class="item-icon">${shortName}</div>
+                    <div class="item-info">
+                        <div class="item-name">${uData.name}</div>
+                        <div class="item-sub">タップして個人トークを開く</div>
+                    </div>
+                `;
+                // メンバーをタップしたら自動で個人トークを開始！
+                item.addEventListener('click', () => {
+                    openPrivateChat(uData.uid, uData.name);
+                });
+                memberList.appendChild(item);
+            });
+        });
+    }
+
+    // 合言葉部屋の作成・参加
     saveRoomBtn.addEventListener('click', () => {
         const pw = roomInput.value.trim();
         if (pw !== "") {
@@ -388,7 +522,6 @@
 
         sendBtn.disabled = true;
         sendBtn.textContent = "送信中";
-
         const formData = new FormData();
         formData.append('image', file);
 
@@ -411,25 +544,16 @@
                     timestamp: serverTimestamp(),
                     readUsers: [currentUserId]
                 });
-            } else {
-                alert("画像の送信に失敗しました。");
-            }
-        } catch (err) {
-            alert("画像送信エラー: " + err.message);
-        } finally {
-            imageInput.value = "";
-            sendBtn.disabled = false;
-            sendBtn.textContent = "送信";
-        }
+            } else { alert("画像の送信に失敗しました。"); }
+        } catch (err) { alert("画像送信エラー: " + err.message); }
+        finally { imageInput.value = ""; sendBtn.disabled = false; sendBtn.textContent = "送信"; }
     });
 
-    // 4. 画面遷移
+    // 4. 部屋の移動
     function openRoom(roomId, title) {
         currentRoomId = roomId;
         chatTitle.textContent = title;
-        
-        listScreen.classList.remove('active');
-        roomScreen.classList.add('active');
+        showScreen('room');
 
         if (unsubscribeChat) unsubscribeChat();
         chatLog.innerHTML = "";
@@ -437,8 +561,7 @@
     }
 
     backBtn.addEventListener('click', () => {
-        roomScreen.classList.remove('active');
-        listScreen.classList.add('active');
+        showScreen('list');
         if (unsubscribeChat) unsubscribeChat();
         currentRoomId = "";
         renderRoomList();
@@ -453,47 +576,37 @@
         openRoom(privateRoomId, privateTitle);
     }
 
-    // ★新機能：トークルームやグループの名前変更ロジック
+    // トーク表示名のカスタマイズ変更
     menuBtn.addEventListener('click', () => {
         const currentTitle = chatTitle.textContent;
         const newTitle = prompt("このトークの表示名を入力してください：", currentTitle);
-        
         if (newTitle !== null && newTitle.trim() !== "") {
             const cleanTitle = newTitle.trim();
-            // ローカルストレージに「部屋ID: 好きな名前」の形式で保存
             localStorage.setItem(`room_name_${currentRoomId}`, cleanTitle);
-            chatTitle.textContent = cleanTitle; // ヘッダーを即時書き換え
+            chatTitle.textContent = cleanTitle;
         }
     });
 
-    // 保存された部屋名を取得する補助関数
-    function getSavedRoomName(roomId) {
-        return localStorage.getItem(`room_name_${roomId}`);
-    }
+    function getSavedRoomName(roomId) { return localStorage.getItem(`room_name_${roomId}`); }
 
-    // 5. グローバル監視（一覧更新用）
+    // 5. グローバルメッセージ監視
     function startGlobalListener() {
         const qAll = query(collection(db, "messages"), orderBy("timestamp", "desc"));
         onSnapshot(qAll, (snapshot) => {
             allMessages = [];
-            snapshot.forEach(doc => {
-                allMessages.push({ id: doc.id, ...doc.data() });
-            });
+            snapshot.forEach(doc => { allMessages.push({ id: doc.id, ...doc.data() }); });
             renderRoomList(); 
         });
     }
 
     function renderRoomList() {
         roomList.innerHTML = "";
-
-        // 全体グループのカスタム名を取得、なければデフォルト
         const globalCustomName = getSavedRoomName("global_group") || "グループチャット（全体）";
         const roomsData = {};
         roomsData["global_group"] = { name: globalCustomName, lastMsg: "まだメッセージはありません", unread: 0, timestamp: 0 };
 
         allMessages.forEach(msg => {
             if (!msg.timestamp) return;
-
             let rId = msg.roomId || "global_group";
             let isForMe = false;
             let roomName = "";
@@ -503,31 +616,22 @@
                 roomName = getSavedRoomName("global_group") || "グループチャット（全体）";
             } else if (rId.startsWith("custom_")) {
                 isForMe = true;
-                // カスタムグループ名が設定されていればそれを使い、なければ合言葉を表示
                 roomName = getSavedRoomName(rId) || "グループ: " + rId.replace("custom_", "");
             } else if (rId.startsWith("private_") && rId.includes(currentUserId)) {
                 isForMe = true;
-                // 個人トークの場合、カスタム名があればそれを使い、なければ相手が直近で送信してきた名前を使用
                 const defaultName = msg.userId === currentUserId ? "個人トーク" : msg.userName;
                 roomName = getSavedRoomName(rId) || defaultName;
             }
 
             if (isForMe) {
-                if (!roomsData[rId]) {
-                    roomsData[rId] = { name: roomName, lastMsg: "", unread: 0, timestamp: 0 };
-                }
-
-                // 常に最新のカスタム名に同期（メッセージデータから引っ張ってきたデフォルト名よりカスタム名を優先）
+                if (!roomsData[rId]) { roomsData[rId] = { name: roomName, lastMsg: "", unread: 0, timestamp: 0 }; }
                 const savedName = getSavedRoomName(rId);
-                if (savedName) {
-                    roomsData[rId].name = savedName;
-                }
+                if (savedName) { roomsData[rId].name = savedName; }
 
                 if (roomsData[rId].timestamp === 0) {
                     roomsData[rId].lastMsg = msg.type === "image" ? "[画像]" : `${msg.userName}: ${msg.messageText}`;
                     roomsData[rId].timestamp = msg.timestamp.toDate().getTime();
                 }
-
                 if (msg.userId !== currentUserId && (!msg.readUsers || !msg.readUsers.includes(currentUserId))) {
                     roomsData[rId].unread++;
                 }
@@ -535,28 +639,22 @@
         });
 
         const sortedRooms = Object.keys(roomsData).sort((a,b) => roomsData[b].timestamp - roomsData[a].timestamp);
-
         sortedRooms.forEach(roomId => {
             const room = roomsData[roomId];
             const item = document.createElement('div');
-            item.className = "room-item";
-            
+            item.className = "list-item";
             const shortName = room.name.substring(0, 2);
             const badgeHtml = room.unread > 0 ? `<span class="room-badge">${room.unread}</span>` : "";
 
             item.innerHTML = `
-                <div class="room-icon">${shortName}</div>
-                <div class="room-info">
-                    <div class="room-name">${room.name}</div>
-                    <div class="room-last-msg">${room.lastMsg}</div>
+                <div class="item-icon">${shortName}</div>
+                <div class="item-info">
+                    <div class="item-name">${room.name}</div>
+                    <div class="item-sub">${room.lastMsg}</div>
                 </div>
                 ${badgeHtml}
             `;
-
-            item.addEventListener('click', () => {
-                openRoom(roomId, room.name);
-            });
-
+            item.addEventListener('click', () => { openRoom(roomId, room.name); });
             roomList.appendChild(item);
         });
     }
@@ -564,10 +662,8 @@
     // 6. トークルーム内のリアルタイム同期
     function startChatLiveUpdate() {
         const q = query(collection(db, "messages"), where("roomId", "==", currentRoomId), orderBy("timestamp", "asc"));
-        
         unsubscribeChat = onSnapshot(q, (snapshot) => {
             chatLog.innerHTML = "";
-
             snapshot.forEach((snapshotDoc) => {
                 const data = snapshotDoc.data();
                 if (!data.timestamp) return;
@@ -582,17 +678,12 @@
                 }
 
                 const readCount = data.readUsers ? data.readUsers.length - 1 : 0;
-                let readText = "";
-                if (readCount > 0) {
-                    readText = currentRoomId.startsWith("private_") ? "既読" : `既読 ${readCount}`;
-                }
+                const readText = readCount > 0 ? (currentRoomId.startsWith("private_") ? "既読" : `既読 ${readCount}`) : "";
 
                 let contentHtml = "";
                 if (data.type === "image" || data.imageUrl) {
                     contentHtml = `<img src="${data.imageUrl}" class="sent-image" alt="画像">`;
-                } else {
-                    contentHtml = data.messageText;
-                }
+                } else { contentHtml = data.messageText; }
 
                 let messageHtml = document.createElement('div');
                 if (isMe) {
@@ -608,31 +699,17 @@
                     messageHtml.className = "message received";
                     const displayName = data.userName || "他";
                     const shortName = displayName.substring(0, 2);
-                    
                     messageHtml.innerHTML = `
-                        <div class="chat-avatar" id="avatar-${snapshotDoc.id}">${shortName}</div>
+                        <div class="chat-avatar">${shortName}</div>
                         <div class="bubble-wrapper">
                             <span class="user-name-label">${displayName}</span>
                             <div class="bubble">${contentHtml}</div>
                         </div>
-                        <div class="status-area">
-                            <span class="time">${timeStr}</span>
-                        </div>
+                        <div class="status-area"><span class="time">${timeStr}</span></div>
                     `;
-                    
-                    setTimeout(() => {
-                        const av = document.getElementById(`avatar-${snapshotDoc.id}`);
-                        if (av) {
-                            av.addEventListener('click', () => {
-                                openPrivateChat(data.userId, displayName);
-                            });
-                        }
-                    }, 0);
                 }
-
                 chatLog.appendChild(messageHtml);
             });
-
             chatLog.scrollTop = chatLog.scrollHeight;
         });
     }
