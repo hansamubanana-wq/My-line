@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LINE風リアルタイムチャット</title>
+    <title>LINE風チャット（アカウント＆既読機能付き）</title>
     <style>
-        /* 全体のリセットと背景 */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -19,8 +18,6 @@
             align-items: center;
             height: 100vh;
         }
-
-        /* チャットコンテナ */
         .chat-container {
             width: 100%;
             max-width: 450px;
@@ -31,18 +28,15 @@
             flex-direction: column;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
         }
-
-        /* ヘッダー部分 */
         .chat-header {
             background-color: #273246;
             color: #ffffff;
-            padding: 15px;
+            padding: 10px 15px;
             text-align: center;
-            font-weight: bold;
-            font-size: 1.1rem;
         }
+        .chat-header .title { font-weight: bold; font-size: 1.1rem; }
+        .chat-header .user-info { font-size: 0.75rem; color: #ccc; margin-top: 2px; }
 
-        /* トーク履歴エリア */
         .chat-log {
             flex: 1;
             overflow-y: auto;
@@ -51,26 +45,18 @@
             flex-direction: column;
             gap: 15px;
         }
-
-        /* メッセージの共通スタイル */
         .message {
             display: flex;
             align-items: flex-end;
             max-width: 75%;
         }
-
-        /* 相手のメッセージ（左側） */
-        .message.received {
-            align-self: flex-start;
-        }
+        .message.received { align-self: flex-start; }
         .message.received .bubble {
             background-color: #ffffff;
             color: #000000;
             border-radius: 15px 15px 15px 0;
             margin-left: 10px;
         }
-
-        /* アイコン */
         .avatar {
             width: 40px;
             height: 40px;
@@ -79,13 +65,11 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: bold;
             color: #555;
             flex-shrink: 0;
         }
-
-        /* 自分のメッセージ（右側） */
         .message.sent {
             align-self: flex-end;
             flex-direction: row-reverse;
@@ -96,27 +80,37 @@
             border-radius: 15px 15px 0 15px;
             margin-right: 10px;
         }
-
-        /* 吹き出しのテキスト */
         .bubble {
             padding: 10px 14px;
             font-size: 0.95rem;
             line-height: 1.4;
             word-break: break-all;
             box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-            white-space: pre-wrap; /* 改行を反映 */
+            white-space: pre-wrap;
         }
-
-        /* 時間の表示 */
+        
+        /* 時間と既読の表示エリア */
+        .status-area {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            margin: 0 5px;
+        }
+        .message.received .status-area { align-items: flex-start; }
+        
+        .read-status {
+            font-size: 0.65rem;
+            color: #e2ffc9;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
         .time {
             font-size: 0.7rem;
             color: #ffffff;
-            margin: 0 5px;
             white-space: nowrap;
             opacity: 0.8;
         }
 
-        /* フッター（入力エリア） */
         .chat-footer {
             background-color: #ffffff;
             padding: 10px;
@@ -143,17 +137,16 @@
             cursor: pointer;
             font-size: 0.9rem;
         }
-        .send-btn:hover {
-            background-color: #459d32;
-        }
     </style>
 </head>
 <body>
 
 <div class="chat-container">
-    <div class="chat-header">みんなのチャットルーム</div>
-    <div class="chat-log" id="chatLog">
-        </div>
+    <div class="chat-header">
+        <div class="title">みんなのチャットルーム</div>
+        <div class="user-info" id="userInfo">ログイン中...</div>
+    </div>
+    <div class="chat-log" id="chatLog"></div>
     <div class="chat-footer">
         <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力">
         <button id="sendBtn" class="send-btn">送信</button>
@@ -162,9 +155,9 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-    // 創一のFirebase設定情報をここにセットしたよ！
     const firebaseConfig = {
         apiKey: "AIzaSyCbFEZH9VywEFumJRbbqPftEJAZJDb8hQ0",
         authDomain: "my-line-chat-f467e.firebaseapp.com",
@@ -174,86 +167,116 @@
         appId: "1:175651281929:web:0644d6cd4449edbbfb6cd8"
     };
 
-    // Firebaseの初期化
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
 
-    // 今回は誰が送っても区別できるように、ランダムなユーザーID（または「自分」）を仮で作るよ
-    // 本来はログイン機能を作るけど、まずは簡単に体験するため！
-    const myId = "user_" + Math.floor(Math.random() * 1000); 
+    let currentUserId = null;
+    let currentUserName = "";
 
     const chatLog = document.getElementById('chatLog');
     const chatInput = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendBtn');
+    const userInfo = document.getElementById('userInfo');
 
-    // 1. メッセージをFirebaseに送信する処理
+    // 1. 【アカウント機能】匿名ログインを実行
+    signInAnonymously(auth).catch((error) => console.error("ログインエラー:", error));
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUserId = user.uid;
+            // ユーザー名をIDの後ろ4桁にして分かりやすくする（例：ユーザー_abcd）
+            currentUserName = "ユーザー_" + currentUserId.substring(currentUserId.length - 4);
+            userInfo.textContent = `あなた: ${currentUserName}`;
+            
+            // ログインが完了したらメッセージの読み込みを開始
+            startChatLiveUpdate();
+        }
+    });
+
+    // 2. メッセージ送信処理
     async function sendMessage() {
         const text = chatInput.value.trim();
-        if (text === "") return; // 空っぽなら何もしない
+        if (text === "" || !currentUserId) return;
 
         try {
-            // Firestoreの「messages」というコレクション（箱）にデータを追加
             await addDoc(collection(db, "messages"), {
-                userId: myId,
+                userId: currentUserId,
+                userName: currentUserName,
                 messageText: text,
-                timestamp: serverTimestamp() // サーバーの正確な時間
+                timestamp: serverTimestamp(),
+                readUsers: [currentUserId] // 【既読機能】送った本人は最初から既読にする
             });
-            chatInput.value = ""; // 入力欄を空にする
+            chatInput.value = "";
         } catch (error) {
-            console.error("エラーが発生したよ: ", error);
+            console.error("送信エラー: ", error);
         }
     }
 
-    // ボタンクリックやEnterキーで送信
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
     });
 
-    // 2. Firebaseからリアルタイムにメッセージを受け取る処理
-    const q = query(collection(db, "messages"), orderBy("timestamp", "asc"));
-    
-    // データベースに変更があったら勝手に実行される（リアルタイム同期）
-    onSnapshot(q, (snapshot) => {
-        chatLog.innerHTML = ""; // 一旦画面をクリアして再描画
+    // 3. チャットのリアルタイム受信と【既読機能】の処理
+    function startChatLiveUpdate() {
+        const q = query(collection(db, "messages"), orderBy("timestamp", "asc"));
+        
+        onSnapshot(q, (snapshot) => {
+            chatLog.innerHTML = "";
 
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            if (!data.timestamp) return; // 時間がまだ取得できてなければパス
+            snapshot.forEach((snapshotDoc) => {
+                const data = snapshotDoc.data();
+                if (!data.timestamp) return;
 
-            // 時間のフォーマット（時:分）
-            const date = data.timestamp.toDate();
-            const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
+                const date = data.timestamp.toDate();
+                const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
+                const isMe = data.userId === currentUserId;
 
-            // 自分が送ったメッセージか、他の人が送ったメッセージか判定
-            const isMe = data.userId === myId;
-            const messageClass = isMe ? "sent" : "received";
+                // 【既読機能のロジック】
+                // 自分以外のメッセージで、まだ自分が既読をつけていなければ、データベースを更新して自分を既読に追加する
+                if (!isMe && (!data.readUsers || !data.readUsers.includes(currentUserId))) {
+                    const docRef = doc(db, "messages", snapshotDoc.id);
+                    updateDoc(docRef, {
+                        readUsers: arrayUnion(currentUserId)
+                    });
+                }
 
-            // HTMLの組み立て
-            let messageHtml = "";
-            if (isMe) {
-                messageHtml = `
-                    <div class="message sent">
-                        <div class="bubble">${data.messageText}</div>
-                        <span class="time">${timeStr}</span>
-                    </div>
-                `;
-            } else {
-                messageHtml = `
-                    <div class="message received">
-                        <div class="avatar">他</div>
-                        <div class="bubble">${data.messageText}</div>
-                        <span class="time">${timeStr}</span>
-                    </div>
-                `;
-            }
+                // 自分以外の既読人数を計算（送った本人を除く既読がついた数）
+                const readCount = data.readUsers ? data.readUsers.length - 1 : 0;
+                // 1人でも読んだら「既読」、複数人なら「既読 2」のようにする
+                const readText = readCount > 0 ? (readCount === 1 ? "既読" : `既読 ${readCount}`) : "";
 
-            chatLog.insertAdjacentHTML('beforeend', messageHtml);
+                let messageHtml = "";
+                if (isMe) {
+                    messageHtml = `
+                        <div class="message sent">
+                            <div class="bubble">${data.messageText}</div>
+                            <div class="status-area">
+                                <span class="read-status">${readText}</span>
+                                <span class="time">${timeStr}</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    const shortName = data.userName ? data.userName.substring(data.userName.length - 2) : "他";
+                    messageHtml = `
+                        <div class="message received">
+                            <div class="avatar">${shortName}</div>
+                            <div class="bubble">${data.messageText}</div>
+                            <div class="status-area">
+                                <span class="time">${timeStr}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                chatLog.insertAdjacentHTML('beforeend', messageHtml);
+            });
+
+            chatLog.scrollTop = chatLog.scrollHeight;
         });
-
-        // 一番下まで自動スクロール
-        chatLog.scrollTop = chatLog.scrollHeight;
-    });
+    }
 </script>
 
 </body>
