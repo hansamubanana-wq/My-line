@@ -1,0 +1,289 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+}
+body {
+    background-color: #7494c0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: calc(var(--vh, 1vh) * 100);
+    overflow: hidden;
+}
+
+.chat-container {
+    width: 100%;
+    max-width: 500px;
+    height: 100%;
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    position: relative;
+}
+
+.screen {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    background-color: #ffffff;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 1;
+}
+.screen.active {
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 2;
+}
+
+/* ヘッダー */
+.header {
+    background-color: #273246;
+    color: #ffffff;
+    padding: 12px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 10;
+}
+.header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+.header .title {
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+.back-btn {
+    background-color: #4b5563;
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.menu-btn { background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer; }
+.logout-btn { background: none; border: none; color: #ff9a9e; font-size: 0.8rem; cursor: pointer; }
+
+/* タブバー（LINE風の画面下部切り替え） */
+.tab-bar {
+    display: flex;
+    border-top: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+    padding-bottom: env(safe-area-inset-bottom);
+}
+.tab-item {
+    flex: 1;
+    text-align: center;
+    padding: 12px 0;
+    font-size: 0.85rem;
+    color: #6b7280;
+    cursor: pointer;
+    font-weight: bold;
+}
+.tab-item.active {
+    color: #3b82f6;
+}
+
+/* リストの共通スタイル */
+.list-content {
+    flex: 1;
+    overflow-y: auto;
+    background-color: #ffffff;
+}
+.list-item {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid #f3f4f6;
+    cursor: pointer;
+}
+.list-item:active { background-color: #f9fafb; }
+
+.item-icon {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    color: #333;
+    font-size: 0.85rem;
+    margin-right: 15px;
+    flex-shrink: 0;
+}
+.item-info { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.item-name { font-weight: bold; font-size: 0.95rem; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-sub { font-size: 0.8rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.room-badge { background-color: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; padding: 2px 7px; border-radius: 10px; margin-left: 10px; }
+
+/* --- ログイン画面のスタイル --- */
+#authScreen {
+    background-color: #273246;
+    justify-content: center;
+    align-items: center;
+    padding: 30px;
+    color: white;
+}
+.auth-box {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+.auth-box h2 { text-align: center; margin-bottom: 10px; font-size: 1.5rem; }
+.auth-input {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    outline: none;
+    font-size: 0.95rem;
+}
+.auth-btn {
+    background-color: #53b63e;
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 5px;
+}
+.auth-toggle {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #cbd5e1;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+/* --- トークルーム画面のスタイル --- */
+#roomScreen { background-color: #7494c0; }
+.chat-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    background-color: #7494c0;
+    -webkit-overflow-scrolling: touch;
+}
+.message { display: flex; align-items: flex-end; max-width: 85%; }
+.message.received { align-self: flex-start; }
+.message.received .bubble-wrapper { margin-left: 8px; }
+.message.received .bubble { background-color: #ffffff; color: #000000; border-radius: 15px 15px 15px 0; }
+
+.chat-avatar {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #333;
+    flex-shrink: 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.bubble-wrapper { display: flex; flex-direction: column; }
+.user-name-label { font-size: 0.7rem; color: #e0e0e0; margin-bottom: 3px; margin-left: 2px; }
+
+.message.sent { align-self: flex-end; flex-direction: row-reverse; }
+.message.sent .bubble { background-color: #85e249; color: #000000; border-radius: 15px 15px 0 15px; margin-right: 8px; }
+
+.bubble { padding: 10px 14px; font-size: 0.95rem; line-height: 1.4; word-break: break-all; box-shadow: 0 1px 2px rgba(0,0,0,0.15); white-space: pre-wrap; }
+.sent-image { max-width: 100%; max-height: 180px; border-radius: 10px; display: block; margin-top: 2px; }
+
+.status-area { display: flex; flex-direction: column; align-items: flex-end; margin: 0 4px; }
+.message.received .status-area { align-items: flex-start; }
+.read-status { font-size: 0.65rem; color: #e2ffc9; font-weight: bold; margin-bottom: 2px; min-height: 12px; }
+.time { font-size: 0.65rem; color: #ffffff; white-space: nowrap; opacity: 0.8; }
+
+.chat-footer {
+    background-color: #f7f7f7;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-top: 1px solid #ddd;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+.image-send-label { cursor: pointer; padding: 5px; font-size: 1.3rem; color: #666; }
+#imageInput { display: none; }
+.chat-input { flex: 1; border: 1px solid #ccc; background-color: #ffffff; padding: 8px 14px; border-radius: 20px; font-size: 0.95rem; outline: none; }
+.send-btn { background-color: #53b63e; color: white; border: none; padding: 7px 14px; border-radius: 20px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+
+/* 部屋作成フォーム */
+.create-room-box { padding: 10px 15px; display: flex; gap: 5px; background-color: #f3f4f6; border-bottom: 1px solid #e5e7eb; }
+.room-create-input { flex: 1; padding: 6px 12px; border-radius: 20px; border: 1px solid #ccc; font-size: 0.85rem; outline: none; }
+.room-create-btn { background-color: #10b981; color: white; border: none; padding: 6px 15px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
+
+/* --- Googleログイン追加のスタイル --- */
+.auth-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: #cbd5e1;
+    font-size: 0.8rem;
+    margin: 8px 0;
+}
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid #4b5563;
+}
+.auth-divider:not(:empty)::before {
+    margin-right: .5em;
+}
+.auth-divider:not(:empty)::after {
+    margin-left: .5em;
+}
+
+.google-btn {
+    background-color: #ffffff;
+    color: #1f2937;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: background-color 0.2s, transform 0.1s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.google-btn:hover {
+    background-color: #f3f4f6;
+}
+.google-btn:active {
+    transform: scale(0.98);
+}
+.google-icon {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
