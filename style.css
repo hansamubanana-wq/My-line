@@ -734,3 +734,188 @@ body {
         transform: scale(1);
     }
 }
+
+/* ==========================================================================
+   スタンプ機能・アナウンス・リプライ・送信取り消し用の追加スタイル
+   ========================================================================== */
+
+/* スタンプ選択パネル */
+.sticker-picker {
+    position: absolute;
+    bottom: -220px; /* 通常は隠す */
+    left: 0;
+    right: 0;
+    height: 200px;
+    background-color: #f3f4f6;
+    border-top: 1px solid #d1d5db;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 15px;
+    overflow-y: auto;
+    z-index: 90;
+    transition: bottom 0.3s ease;
+}
+.sticker-picker.active {
+    bottom: calc(48px + env(safe-area-inset-bottom)); /* フッターの上に表示 */
+}
+.sticker-item {
+    font-size: 2.2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    background-color: #ffffff;
+    border-radius: 12px;
+    aspect-ratio: 1;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: transform 0.1s, background-color 0.2s;
+}
+.sticker-item:hover {
+    background-color: #f9fafb;
+    transform: scale(1.05);
+}
+.sticker-toggle-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #666;
+    cursor: pointer;
+    padding: 5px;
+    line-height: 1;
+}
+
+/* スタンプ表示用メッセージバブル */
+.message.sent .bubble.sticker-bubble,
+.message.received .bubble.sticker-bubble {
+    background: none !important;
+    box-shadow: none !important;
+    font-size: 4.5rem;
+    line-height: 1;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+}
+
+/* 送信取り消しされたメッセージのシステム表示 */
+.message.unsent {
+    align-self: center !important;
+    max-width: 90% !important;
+    justify-content: center;
+}
+.message.unsent .bubble {
+    background-color: rgba(255,255,255,0.15) !important;
+    color: #f3f4f6 !important;
+    font-size: 0.8rem !important;
+    padding: 4px 12px !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    border: 1px dashed rgba(255,255,255,0.2) !important;
+}
+
+/* アナウンス（ピン留め）バー */
+.announcement-bar {
+    position: absolute;
+    top: 50px; /* ヘッダーの下 */
+    left: 0;
+    right: 0;
+    background-color: rgba(39, 50, 70, 0.95);
+    color: white;
+    padding: 8px 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    z-index: 80;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    transform: translateY(-100%);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.announcement-bar.active {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+.announcement-text {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: bold;
+    cursor: pointer;
+}
+.close-announce-btn {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 1.2rem;
+    cursor: pointer;
+}
+
+/* リプライプレビュー（フッター上部） */
+.reply-preview-box {
+    position: absolute;
+    bottom: 50px;
+    left: 0;
+    right: 0;
+    background-color: #f3f4f6;
+    border-top: 1px solid #d1d5db;
+    padding: 6px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: #4b5563;
+    z-index: 95;
+    display: none; /* 通常は非表示 */
+}
+.reply-preview-box.active {
+    display: flex;
+}
+.cancel-reply-btn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: #9ca3af;
+    cursor: pointer;
+}
+
+/* 引用リプライ付きチャットバブル */
+.reply-quote-box {
+    background-color: rgba(0, 0, 0, 0.05);
+    border-left: 3px solid #3b82f6;
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    font-size: 0.8rem;
+    color: #4b5563;
+    cursor: pointer;
+    min-width: 120px;
+}
+.message.sent .reply-quote-box {
+    border-left-color: #53b63e;
+    background-color: rgba(0, 0, 0, 0.08);
+}
+.reply-quote-user {
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+.reply-quote-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+/* メッセージバブルをクリック可能に */
+.bubble {
+    cursor: pointer;
+    transition: opacity 0.1s;
+}
+.bubble:active {
+    opacity: 0.85;
+}

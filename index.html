@@ -74,13 +74,27 @@
                 <button id="menuBtn" class="menu-btn">︙</button>
             </div>
         </div>
+        <!-- アナウンス（ピン留め）バー -->
+        <div id="announcementBar" class="announcement-bar">
+            <span class="announcement-icon">📢</span>
+            <span id="announcementText" class="announcement-text">アナウンスはまだありません</span>
+            <button id="closeAnnounceBtn" class="close-announce-btn">×</button>
+        </div>
         <div class="chat-log" id="chatLog"></div>
+        <!-- リプライプレビュー -->
+        <div id="replyPreviewBox" class="reply-preview-box">
+            <span id="replyPreviewText">〇〇さんへのリプライ</span>
+            <button id="cancelReplyBtn" class="cancel-reply-btn">×</button>
+        </div>
         <div class="chat-footer">
             <label for="imageInput" class="image-send-label">📎</label>
             <input type="file" id="imageInput" accept="image/*">
+            <button id="stickerBtn" class="sticker-toggle-btn">😊</button>
             <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力">
             <button id="sendBtn" class="send-btn">送信</button>
         </div>
+        <!-- スタンプ選択パネル -->
+        <div id="stickerPicker" class="sticker-picker"></div>
     </div>
 
     <!-- プロフィール編集モーダル -->
@@ -95,6 +109,10 @@
             <div class="modal-input-group">
                 <label for="profileModalName">お名前 (必須)</label>
                 <input type="text" id="profileModalName" placeholder="お名前を入力してください">
+            </div>
+            <div class="modal-input-group">
+                <label for="profileModalStatus">ステータスメッセージ (一言)</label>
+                <input type="text" id="profileModalStatus" placeholder="今日の気分や予定など">
             </div>
             <div class="modal-btn-group">
                 <button id="profileSaveBtn" class="modal-btn save">保存</button>
@@ -145,6 +163,17 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- メッセージ操作メニュー（モーダル） -->
+    <div id="messageActionModal" class="modal">
+        <div class="modal-content" style="max-width: 300px; gap: 12px; text-align: center;">
+            <h4 id="actionModalHeader" style="margin-bottom: 5px; color: #1f2937;">メッセージ操作</h4>
+            <button id="actionReplyBtn" class="modal-btn save" style="background-color: #3b82f6;">↩ 返信 (リプライ)</button>
+            <button id="actionAnnounceBtn" class="modal-btn save" style="background-color: #f59e0b;">📢 アナウンスに設定</button>
+            <button id="actionUnsendBtn" class="modal-btn save" style="background-color: #ef4444; display: none;">✖ 送信取り消し</button>
+            <button id="actionCloseBtn" class="modal-btn cancel">閉じる</button>
         </div>
     </div>
 

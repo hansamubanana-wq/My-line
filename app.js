@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion, where, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion, where, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -18,11 +18,17 @@ const auth = getAuth(app);
 let currentUserId = null;
 let currentUserName = "";
 let currentUserIconUrl = "";
+let currentUserStatus = ""; // ステータスメッセージ (一言)
 let currentRoomId = "global_group"; 
 let isSignUpMode = false; // ログインか新規登録かの切り替えフラグ
 
 let unsubscribeChat = null;
 let allMessages = []; 
+
+// プレミアム機能用変数
+let replyToMessage = null; // { id, userName, messageText }
+let activeAnnouncementUnsubscribe = null;
+let selectedMessageForAction = null; // { id, userId, userName, messageText, elementId }
 
 // キャッシュオブジェクト（リアルタイム同期用）
 let roomsCache = {}; // { roomId: { name, iconUrl } }
@@ -98,6 +104,40 @@ const backBtn = document.getElementById('backBtn');
 const menuBtn = document.getElementById('menuBtn');
 const memberMainTitle = document.getElementById('memberMainTitle');
 const googleAuthBtn = document.getElementById('googleAuthBtn');
+
+const stickerBtn = document.getElementById('stickerBtn');
+const stickerPicker = document.getElementById('stickerPicker');
+const replyPreviewBox = document.getElementById('replyPreviewBox');
+const replyPreviewText = document.getElementById('replyPreviewText');
+const cancelReplyBtn = document.getElementById('cancelReplyBtn');
+
+const messageActionModal = document.getElementById('messageActionModal');
+const actionReplyBtn = document.getElementById('actionReplyBtn');
+const actionAnnounceBtn = document.getElementById('actionAnnounceBtn');
+const actionUnsendBtn = document.getElementById('actionUnsendBtn');
+const actionCloseBtn = document.getElementById('actionCloseBtn');
+
+const STICKERS = ["🐱", "🐶", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦"];
+
+// スタンプ選択パネルの初期化
+STICKERS.forEach(sticker => {
+    const btn = document.createElement('button');
+    btn.className = 'sticker-item';
+    btn.textContent = sticker;
+    btn.addEventListener('click', () => {
+        sendSticker(sticker);
+        stickerPicker.classList.remove('active');
+    });
+    stickerPicker.appendChild(btn);
+});
+
+// スタンプボタンのトグル挙動
+if (stickerBtn && stickerPicker) {
+    stickerBtn.addEventListener('click', () => {
+        stickerPicker.classList.toggle('active');
+    });
+}
+
 
 function setScreenSize() {
     let vh = window.innerHeight * 0.01;
@@ -217,8 +257,11 @@ const profileCloseBtn = document.getElementById('profileCloseBtn');
 
 let tempProfileIconBase64 = "";
 
+const profileModalStatus = document.getElementById('profileModalStatus');
+
 function openProfileModal() {
     profileModalName.value = currentUserName || "";
+    profileModalStatus.value = currentUserStatus || "";
     tempProfileIconBase64 = currentUserIconUrl || "";
     
     // アイコンのプレビュー更新
@@ -261,6 +304,7 @@ profileIconInput.addEventListener('change', async (e) => {
 // プロフィール保存
 profileSaveBtn.addEventListener('click', async () => {
     const newName = profileModalName.value.trim();
+    const newStatus = profileModalStatus.value.trim();
     if (!newName || newName === "名無しさん" || newName === "Googleユーザー") {
         alert("有効なお名前を入力してください！");
         return;
@@ -275,11 +319,13 @@ profileSaveBtn.addEventListener('click', async () => {
             uid: currentUserId,
             name: newName,
             email: auth.currentUser.email,
-            iconUrl: tempProfileIconBase64
+            iconUrl: tempProfileIconBase64,
+            status: newStatus
         }, { merge: true });
         
         currentUserName = newName;
         currentUserIconUrl = tempProfileIconBase64;
+        currentUserStatus = newStatus;
         
         // 友達タイトルも更新
         memberMainTitle.textContent = `友だち (${currentUserName})`;
@@ -398,12 +444,16 @@ function renderMyProfileCard() {
         ? `<img src="${currentUserIconUrl}" alt="アイコン">`
         : shortName;
         
+    const subText = currentUserStatus 
+        ? `💬 ${currentUserStatus}` 
+        : "タップしてプロフィール設定";
+        
     container.innerHTML = `
         <div class="my-profile-card" id="myProfileCardBtn">
             <div class="item-icon">${iconHtml}</div>
             <div class="item-info">
                 <div class="item-name">${currentUserName || "名前を設定してください"}</div>
-                <div class="item-sub">タップしてプロフィール設定</div>
+                <div class="item-sub">${subText}</div>
             </div>
         </div>
     `;
@@ -459,6 +509,7 @@ onAuthStateChanged(auth, async (user) => {
             const uData = userDoc.data();
             currentUserName = uData.name || "";
             currentUserIconUrl = uData.iconUrl || "";
+            currentUserStatus = uData.status || "";
         } else {
             // GoogleログインなどでFirestoreドキュメントがまだない場合
             currentUserName = user.displayName || "";
@@ -505,7 +556,8 @@ function startMemberListListener() {
             // ユーザー情報をキャッシュに蓄積（個人トークの表示用）
             usersCache[uData.uid] = {
                 name: uData.name,
-                iconUrl: uData.iconUrl || ""
+                iconUrl: uData.iconUrl || "",
+                status: uData.status || ""
             };
 
             if(uData.uid === currentUserId) return; // 自分は一覧に出さない
@@ -517,11 +569,16 @@ function startMemberListListener() {
                 ? `<img src="${uData.iconUrl}" alt="アイコン">`
                 : shortName;
 
+            const statusHtml = uData.status 
+                ? `<div style="font-size: 0.75rem; color: #53b63e; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; margin-top: 2px;">💬 ${uData.status}</div>` 
+                : "";
+
             item.innerHTML = `
                 <div class="item-icon">${iconHtml}</div>
                 <div class="item-info">
                     <div class="item-name">${uData.name}</div>
-                    <div class="item-sub">タップして個人トークを開く</div>
+                    ${statusHtml}
+                    <div class="item-sub" style="margin-top: 2px;">タップして個人トークを開く</div>
                 </div>
             `;
             // メンバーをタップしたら自動で個人トークを開始！
@@ -559,7 +616,7 @@ async function sendMessage() {
     if (text === "" || !currentUserId) return;
 
     try {
-        await addDoc(collection(db, "messages"), {
+        const messageData = {
             roomId: currentRoomId,
             userId: currentUserId,
             userName: currentUserName,
@@ -568,12 +625,42 @@ async function sendMessage() {
             type: "text",
             timestamp: serverTimestamp(),
             readUsers: [currentUserId]
-        });
+        };
+
+        if (replyToMessage) {
+            messageData.replyTo = replyToMessage;
+        }
+
+        await addDoc(collection(db, "messages"), messageData);
         chatInput.value = "";
+
+        // リプライを解除
+        replyToMessage = null;
+        if (replyPreviewBox) replyPreviewBox.classList.remove('active');
     } catch (err) { alert("送信失敗: " + err.message); }
 }
 sendBtn.addEventListener('click', sendMessage);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+// 2-2. スタンプ送信
+async function sendSticker(sticker) {
+    if (!currentUserId || !currentRoomId) return;
+    try {
+        await addDoc(collection(db, "messages"), {
+            roomId: currentRoomId,
+            userId: currentUserId,
+            userName: currentUserName,
+            userIconUrl: currentUserIconUrl || "",
+            messageText: sticker,
+            type: "sticker",
+            timestamp: serverTimestamp(),
+            readUsers: [currentUserId]
+        });
+    } catch (err) {
+        console.error("スタンプ送信エラー:", err);
+    }
+}
+
 
 // 3. 画像送信（Imgur連携 ＆ 頑丈なBase64ダイレクト自動フォールバック）
 imageInput.addEventListener('change', async (e) => {
@@ -669,6 +756,9 @@ function openRoom(roomId, title) {
     
     // この部屋のメンバーとして自分を登録
     registerRoomMember(roomId);
+    
+    // アナウンスのリアルタイム監視を開始
+    startAnnouncementListener(roomId);
 }
 
 backBtn.addEventListener('click', () => {
@@ -678,7 +768,172 @@ backBtn.addEventListener('click', () => {
     renderRoomList();
     // ドロワーも閉じる
     document.getElementById('groupDrawer').classList.remove('active');
+    
+    // アナウンスの監視解除とバーの非表示
+    if (activeAnnouncementUnsubscribe) {
+        activeAnnouncementUnsubscribe();
+        activeAnnouncementUnsubscribe = null;
+    }
+    const announcementBar = document.getElementById('announcementBar');
+    if (announcementBar) {
+        announcementBar.classList.remove('active');
+    }
 });
+
+// アナウンス情報の監視開始
+function startAnnouncementListener(roomId) {
+    if (activeAnnouncementUnsubscribe) activeAnnouncementUnsubscribe();
+    
+    const announcementBar = document.getElementById('announcementBar');
+    const announcementText = document.getElementById('announcementText');
+    if (!announcementBar || !announcementText) return;
+    
+    const announcementRef = doc(db, "rooms", roomId, "announcements", "active");
+    
+    activeAnnouncementUnsubscribe = onSnapshot(announcementRef, (docSnap) => {
+        if (docSnap.exists() && docSnap.data().messageId) {
+            const data = docSnap.data();
+            announcementText.textContent = data.text;
+            announcementBar.classList.add('active');
+            
+            // アナウンスバーをクリックしたときの挙動
+            announcementBar.onclick = (e) => {
+                if (e.target.id === 'closeAnnounceBtn') return; // 閉じるボタンは除く
+                
+                const targetElement = document.getElementById(`msg_${data.messageId}`);
+                if (targetElement) {
+                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const bubble = targetElement.querySelector('.bubble');
+                    if (bubble) {
+                        bubble.style.transition = "background-color 0.3s ease";
+                        const originalBg = bubble.style.backgroundColor;
+                        bubble.style.backgroundColor = "#fef08a"; // 黄色のハイライト
+                        setTimeout(() => {
+                            bubble.style.backgroundColor = originalBg;
+                        }, 1500);
+                    }
+                } else {
+                    alert("該当のメッセージが見つかりません（過去ログに埋もれているか、削除されています）");
+                }
+            };
+        } else {
+            announcementBar.classList.remove('active');
+        }
+    });
+}
+
+// アナウンス解除（閉じるボタン）の挙動
+const closeAnnounceBtn = document.getElementById('closeAnnounceBtn');
+if (closeAnnounceBtn) {
+    closeAnnounceBtn.addEventListener('click', async (e) => {
+        e.stopPropagation(); // 親要素（バー全体のクリック）への伝播を防止
+        if (!currentRoomId) return;
+        try {
+            const announcementRef = doc(db, "rooms", currentRoomId, "announcements", "active");
+            await deleteDoc(announcementRef);
+        } catch (err) {
+            console.error("アナウンス解除エラー:", err);
+        }
+    });
+}
+
+// メッセージ操作モーダル周りの挙動
+function openMessageActionModal(messageId, userId, userName, messageText, elementId) {
+    selectedMessageForAction = { id: messageId, userId, userName, messageText, elementId };
+    
+    // 自分が送信したメッセージの場合のみ送信取り消しを表示
+    if (userId === currentUserId) {
+        actionUnsendBtn.style.display = "block";
+    } else {
+        actionUnsendBtn.style.display = "none";
+    }
+    
+    messageActionModal.classList.add('active');
+}
+
+function closeMessageActionModal() {
+    messageActionModal.classList.remove('active');
+    selectedMessageForAction = null;
+}
+
+if (actionCloseBtn) {
+    actionCloseBtn.addEventListener('click', closeMessageActionModal);
+}
+
+// メッセージ操作モーダルのアクション：送信取り消し
+if (actionUnsendBtn) {
+    actionUnsendBtn.addEventListener('click', async () => {
+        if (!selectedMessageForAction) return;
+        const msgId = selectedMessageForAction.id;
+        try {
+            const docRef = doc(db, "messages", msgId);
+            await updateDoc(docRef, {
+                type: "unsent",
+                messageText: "送信取り消しされました"
+            });
+            closeMessageActionModal();
+        } catch (err) {
+            alert("送信取り消しに失敗しました: " + err.message);
+        }
+    });
+}
+
+// メッセージ操作モーダルのアクション：アナウンス設定
+if (actionAnnounceBtn) {
+    actionAnnounceBtn.addEventListener('click', async () => {
+        if (!selectedMessageForAction || !currentRoomId) return;
+        const msgId = selectedMessageForAction.id;
+        const senderName = selectedMessageForAction.userName;
+        const text = selectedMessageForAction.messageText;
+        
+        try {
+            const announcementRef = doc(db, "rooms", currentRoomId, "announcements", "active");
+            await setDoc(announcementRef, {
+                text: `${senderName}: ${text}`,
+                messageId: msgId,
+                pinnedBy: currentUserName,
+                pinnedAt: serverTimestamp()
+            });
+            closeMessageActionModal();
+        } catch (err) {
+            alert("アナウンスの設定に失敗しました: " + err.message);
+        }
+    });
+}
+
+// メッセージ操作モーダルのアクション：リプライ設定
+if (actionReplyBtn) {
+    actionReplyBtn.addEventListener('click', () => {
+        if (!selectedMessageForAction) return;
+        
+        replyToMessage = {
+            id: selectedMessageForAction.id,
+            userName: selectedMessageForAction.userName,
+            messageText: selectedMessageForAction.messageText
+        };
+        
+        if (replyPreviewText) {
+            replyPreviewText.textContent = `${selectedMessageForAction.userName}さんへのリプライ: ${selectedMessageForAction.messageText}`;
+        }
+        if (replyPreviewBox) {
+            replyPreviewBox.classList.add('active');
+        }
+        
+        closeMessageActionModal();
+        chatInput.focus();
+    });
+}
+
+// リプライキャンセルの挙動
+if (cancelReplyBtn) {
+    cancelReplyBtn.addEventListener('click', () => {
+        replyToMessage = null;
+        if (replyPreviewBox) {
+            replyPreviewBox.classList.remove('active');
+        }
+    });
+}
+
 
 function openPrivateChat(targetUserId, targetUserName) {
     if (targetUserId === currentUserId) return;
@@ -1051,6 +1306,18 @@ function startChatLiveUpdate() {
             const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
             const isMe = data.userId === currentUserId;
 
+            // 送信取り消しされたメッセージの特別処理
+            if (data.type === "unsent") {
+                let systemMsgHtml = document.createElement('div');
+                systemMsgHtml.className = "message unsent";
+                systemMsgHtml.id = `msg_${snapshotDoc.id}`;
+                systemMsgHtml.innerHTML = `
+                    <div class="bubble">${data.userName}がメッセージの送信を取り消しました</div>
+                `;
+                chatLog.appendChild(systemMsgHtml);
+                return;
+            }
+
             // 無効なユーザーID（nullやundefinedなど）を除外してユニークな既読ユーザーを計算
             const uniqueReadUsers = data.readUsers
                 ? [...new Set(data.readUsers.filter(uid => uid && uid !== "null" && uid !== "undefined"))]
@@ -1071,16 +1338,38 @@ function startChatLiveUpdate() {
             const readCount = hasSender ? uniqueReadUsers.length - 1 : uniqueReadUsers.length;
             const readText = readCount > 0 ? (currentRoomId.startsWith("private_") ? "既読" : `既読 ${readCount}`) : "";
 
+            // リプライ引用枠の構築
+            let replyQuoteHtml = "";
+            if (data.replyTo) {
+                replyQuoteHtml = `
+                    <div class="reply-quote-box" data-target-id="${data.replyTo.id}">
+                        <div style="font-weight: bold; font-size: 0.75rem; margin-bottom: 2px;">${data.replyTo.userName}</div>
+                        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">${data.replyTo.messageText}</div>
+                    </div>
+                `;
+            }
+
             let contentHtml = "";
-            if (data.type === "image" || data.imageUrl) {
+            let isSticker = data.type === "sticker";
+            let bubbleClass = isSticker ? "bubble sticker-bubble" : "bubble";
+
+            if (isSticker) {
+                contentHtml = `<span>${data.messageText}</span>`;
+            } else if (data.type === "image" || data.imageUrl) {
                 contentHtml = `<img src="${data.imageUrl}" class="sent-image" alt="画像">`;
-            } else { contentHtml = data.messageText; }
+            } else { 
+                contentHtml = `<div>${data.messageText}</div>`; 
+            }
 
             let messageHtml = document.createElement('div');
+            messageHtml.id = `msg_${snapshotDoc.id}`;
             if (isMe) {
                 messageHtml.className = "message sent";
                 messageHtml.innerHTML = `
-                    <div class="bubble">${contentHtml}</div>
+                    <div class="${bubbleClass}">
+                        ${replyQuoteHtml}
+                        ${contentHtml}
+                    </div>
                     <div class="status-area">
                         <span class="read-status">${readText}</span>
                         <span class="time">${timeStr}</span>
@@ -1097,13 +1386,50 @@ function startChatLiveUpdate() {
                     <div class="chat-avatar">${iconHtml}</div>
                     <div class="bubble-wrapper">
                         <span class="user-name-label">${displayName}</span>
-                        <div class="bubble">${contentHtml}</div>
+                        <div class="${bubbleClass}">
+                            ${replyQuoteHtml}
+                            ${contentHtml}
+                        </div>
                     </div>
                     <div class="status-area"><span class="time">${timeStr}</span></div>
                 `;
             }
             chatLog.appendChild(messageHtml);
+
+            // 吹き出しをクリックしたときに操作メニューを開く
+            let bubbleEl = messageHtml.querySelector('.bubble');
+            if (bubbleEl) {
+                bubbleEl.style.cursor = "pointer";
+                bubbleEl.addEventListener('click', () => {
+                    openMessageActionModal(snapshotDoc.id, data.userId, data.userName, data.messageText || (data.type === "image" ? "[画像]" : "[スタンプ]"), messageHtml.id);
+                });
+            }
+
+            // 引用リプライ部分をクリックしたときに元のメッセージへスクロールする
+            let replyQuoteEl = messageHtml.querySelector('.reply-quote-box');
+            if (replyQuoteEl) {
+                replyQuoteEl.addEventListener('click', (e) => {
+                    e.stopPropagation(); // 吹き出し自体のクリックイベント（操作メニュー）が発火しないようにする
+                    const targetId = replyQuoteEl.getAttribute('data-target-id');
+                    const targetElement = document.getElementById(`msg_${targetId}`);
+                    if (targetElement) {
+                        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        const targetBubble = targetElement.querySelector('.bubble');
+                        if (targetBubble) {
+                            targetBubble.style.transition = "background-color 0.3s ease";
+                            const originalBg = targetBubble.style.backgroundColor;
+                            targetBubble.style.backgroundColor = "#fef08a"; // 薄い黄色のハイライト
+                            setTimeout(() => {
+                                targetBubble.style.backgroundColor = originalBg;
+                            }, 1500);
+                        }
+                    } else {
+                        alert("引用元のメッセージが見つかりません（過去ログに埋もれているか、削除されています）");
+                    }
+                });
+            }
         });
         chatLog.scrollTop = chatLog.scrollHeight;
     });
 }
+
