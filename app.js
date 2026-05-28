@@ -328,7 +328,7 @@ function renderRoomList() {
         } else if (rId.startsWith("custom_")) {
             isForMe = true;
             roomName = getSavedRoomName(rId) || "グループ: " + rId.replace("custom_", "");
-        } else if (rId.startsWith("private_") && rId.includes(currentUserId)) {
+        } else if (currentUserId && currentUserId !== "null" && currentUserId !== "undefined" && rId.startsWith("private_") && rId.includes(currentUserId)) {
             isForMe = true;
             const defaultName = msg.userId === currentUserId ? "個人トーク" : msg.userName;
             roomName = getSavedRoomName(rId) || defaultName;
@@ -343,7 +343,7 @@ function renderRoomList() {
                 roomsData[rId].lastMsg = msg.type === "image" ? "[画像]" : `${msg.userName}: ${msg.messageText}`;
                 roomsData[rId].timestamp = msg.timestamp.toDate().getTime();
             }
-            if (msg.userId !== currentUserId && (!msg.readUsers || !msg.readUsers.includes(currentUserId))) {
+            if (currentUserId && currentUserId !== "null" && currentUserId !== "undefined" && msg.userId !== currentUserId && (!msg.readUsers || !msg.readUsers.includes(currentUserId))) {
                 roomsData[rId].unread++;
             }
         }
@@ -383,12 +383,24 @@ function startChatLiveUpdate() {
             const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
             const isMe = data.userId === currentUserId;
 
-            if (!isMe && (!data.readUsers || !data.readUsers.includes(currentUserId))) {
+            // 無効なユーザーID（nullやundefinedなど）を除外してユニークな既読ユーザーを計算
+            const uniqueReadUsers = data.readUsers
+                ? [...new Set(data.readUsers.filter(uid => uid && uid !== "null" && uid !== "undefined"))]
+                : [];
+
+            // ログイン済みかつ有効な自分のUIDがあり、自分が送信者ではない場合、かつ未読の場合は既読にする
+            if (currentUserId && currentUserId !== "null" && currentUserId !== "undefined" && !isMe && !uniqueReadUsers.includes(currentUserId)) {
                 const docRef = doc(db, "messages", snapshotDoc.id);
                 updateDoc(docRef, { readUsers: arrayUnion(currentUserId) });
+                // ローカルの計算用配列にも追加して、Firestoreからのリアルタイム反映を待たずに即時表示を正しくする
+                if (!uniqueReadUsers.includes(currentUserId)) {
+                    uniqueReadUsers.push(currentUserId);
+                }
             }
 
-            const readCount = data.readUsers ? data.readUsers.length - 1 : 0;
+            // 既読数の計算（送信者自身が含まれている場合は-1する）
+            const hasSender = uniqueReadUsers.includes(data.userId);
+            const readCount = hasSender ? uniqueReadUsers.length - 1 : uniqueReadUsers.length;
             const readText = readCount > 0 ? (currentRoomId.startsWith("private_") ? "既読" : `既読 ${readCount}`) : "";
 
             let contentHtml = "";
