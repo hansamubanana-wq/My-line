@@ -38,8 +38,10 @@
                 <button class="logout-btn" id="logoutBtn1">ログアウト</button>
             </div>
         </div>
-        <div class="list-content" id="memberList">
-            </div>
+        <div class="list-content" style="display:flex; flex-direction:column; overflow:hidden;">
+            <div id="myProfileCardContainer"></div>
+            <div id="memberList" style="flex:1; overflow-y:auto;"></div>
+        </div>
         <div class="tab-bar">
             <div class="tab-item active" id="tabMember">友だち</div>
             <div class="tab-item" id="tabTalk">トーク</div>
@@ -78,6 +80,51 @@
             <input type="file" id="imageInput" accept="image/*">
             <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力">
             <button id="sendBtn" class="send-btn">送信</button>
+        </div>
+    </div>
+
+    <!-- プロフィール編集モーダル -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <h3>プロフィール設定</h3>
+            <div class="profile-avatar-container">
+                <div id="profileModalIcon" class="profile-avatar-preview">👤</div>
+                <label for="profileIconInput" class="avatar-upload-btn">画像をアップロード</label>
+                <input type="file" id="profileIconInput" accept="image/*" style="display:none;">
+            </div>
+            <div class="modal-input-group">
+                <label for="profileModalName">お名前 (必須)</label>
+                <input type="text" id="profileModalName" placeholder="お名前を入力してください">
+            </div>
+            <div class="modal-btn-group">
+                <button id="profileSaveBtn" class="modal-btn save">保存</button>
+                <button id="profileCloseBtn" class="modal-btn cancel">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- グループメニュー（ドロワー） -->
+    <div id="groupDrawer" class="drawer">
+        <div class="drawer-content">
+            <div class="drawer-header">
+                <h3>トーク設定</h3>
+                <button id="closeDrawerBtn" class="close-drawer-btn">×</button>
+            </div>
+            <div class="drawer-body">
+                <div class="drawer-section">
+                    <label>トークルーム名</label>
+                    <div class="room-name-edit-box">
+                        <input type="text" id="drawerRoomNameInput">
+                        <button id="drawerRoomNameSaveBtn">変更</button>
+                    </div>
+                </div>
+                <div class="drawer-section">
+                    <label id="drawerMemberCount">メンバー (0)</label>
+                    <div id="drawerMemberList" class="drawer-member-list">
+                        <!-- メンバーがグリッド表示される -->
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

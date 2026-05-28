@@ -17,11 +17,50 @@ const auth = getAuth(app);
 
 let currentUserId = null;
 let currentUserName = "";
+let currentUserIconUrl = "";
 let currentRoomId = "global_group"; 
 let isSignUpMode = false; // ログインか新規登録かの切り替えフラグ
 
 let unsubscribeChat = null;
 let allMessages = []; 
+
+// 画像の圧縮とBase64変換のユーティリティ関数
+function compressAndConvertToBase64(file, maxWidth = 800, maxHeight = 800, quality = 0.7) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                resolve(dataUrl);
+            };
+            img.src = e.target.result;
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+    });
+} 
 
 // 各種画面要素
 const screens = {
@@ -145,17 +184,163 @@ document.getElementById('logoutBtn1').addEventListener('click', logout);
 document.getElementById('logoutBtn2').addEventListener('click', logout);
 
 // 認証状態の監視
+// --- プロフィール編集モーダルの処理 ---
+const profileModal = document.getElementById('profileModal');
+const profileModalName = document.getElementById('profileModalName');
+const profileModalIcon = document.getElementById('profileModalIcon');
+const profileIconInput = document.getElementById('profileIconInput');
+const profileSaveBtn = document.getElementById('profileSaveBtn');
+const profileCloseBtn = document.getElementById('profileCloseBtn');
+
+let tempProfileIconBase64 = "";
+
+function openProfileModal() {
+    profileModalName.value = currentUserName || "";
+    tempProfileIconBase64 = currentUserIconUrl || "";
+    
+    // アイコンのプレビュー更新
+    updateProfileModalPreview(tempProfileIconBase64);
+    
+    // 名無しさん・Googleユーザーの場合は強制設定にするため閉じるボタンを隠す
+    const isNameInvalid = !currentUserName || currentUserName === "名無しさん" || currentUserName === "Googleユーザー" || currentUserName.trim() === "";
+    if (isNameInvalid) {
+        profileCloseBtn.style.display = "none";
+    } else {
+        profileCloseBtn.style.display = "block";
+    }
+    
+    profileModal.classList.add('active');
+}
+
+function updateProfileModalPreview(url) {
+    if (url) {
+        profileModalIcon.innerHTML = `<img src="${url}" alt="アバター">`;
+    } else {
+        const shortName = currentUserName ? currentUserName.substring(0, 2) : "自分";
+        profileModalIcon.textContent = shortName;
+    }
+}
+
+// ファイル選択時の圧縮処理
+profileIconInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+        // アイコン画像は150x150で充分高精細かつ軽量
+        const compressedBase64 = await compressAndConvertToBase64(file, 150, 150, 0.8);
+        tempProfileIconBase64 = compressedBase64;
+        updateProfileModalPreview(compressedBase64);
+    } catch (err) {
+        alert("画像の読み込みに失敗しました。");
+    }
+});
+
+// プロフィール保存
+profileSaveBtn.addEventListener('click', async () => {
+    const newName = profileModalName.value.trim();
+    if (!newName || newName === "名無しさん" || newName === "Googleユーザー") {
+        alert("有効なお名前を入力してください！");
+        return;
+    }
+    
+    profileSaveBtn.disabled = true;
+    profileSaveBtn.textContent = "保存中...";
+    
+    try {
+        const userDocRef = doc(db, "users", currentUserId);
+        await setDoc(userDocRef, {
+            uid: currentUserId,
+            name: newName,
+            email: auth.currentUser.email,
+            iconUrl: tempProfileIconBase64
+        }, { merge: true });
+        
+        currentUserName = newName;
+        currentUserIconUrl = tempProfileIconBase64;
+        
+        // 友達タイトルも更新
+        memberMainTitle.textContent = `友だち (${currentUserName})`;
+        
+        // 自分カードの更新
+        renderMyProfileCard();
+        
+        // プロフィールが正しく入力されたらモーダルを閉じる
+        profileModal.classList.remove('active');
+        
+        // 各種トークの自分のメンバー情報も更新登録
+        if (currentRoomId) {
+            registerRoomMember(currentRoomId);
+        }
+    } catch (err) {
+        alert("保存エラー: " + err.message);
+    } finally {
+        profileSaveBtn.disabled = false;
+        profileSaveBtn.textContent = "保存";
+    }
+});
+
+profileCloseBtn.addEventListener('click', () => {
+    profileModal.classList.remove('active');
+});
+
+// 自分カードの描画関数
+function renderMyProfileCard() {
+    const container = document.getElementById('myProfileCardContainer');
+    if (!container) return;
+    
+    const shortName = currentUserName ? currentUserName.substring(0, 2) : "自分";
+    const iconHtml = currentUserIconUrl 
+        ? `<img src="${currentUserIconUrl}" alt="アイコン">`
+        : shortName;
+        
+    container.innerHTML = `
+        <div class="my-profile-card" id="myProfileCardBtn">
+            <div class="item-icon">${iconHtml}</div>
+            <div class="item-info">
+                <div class="item-name">${currentUserName || "名前を設定してください"}</div>
+                <div class="item-sub">タップしてプロフィール設定</div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('myProfileCardBtn').addEventListener('click', () => {
+        openProfileModal();
+    });
+}
+
+// 認証状態の監視
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUserId = user.uid;
-        // データベースからログインした人の名前を取得
-        const userDoc = await getDoc(doc(db, "users", currentUserId));
+        // データベースからログインした人の情報を取得
+        const userDocRef = doc(db, "users", currentUserId);
+        const userDoc = await getDoc(userDocRef);
+        
         if(userDoc.exists()) {
-            currentUserName = userDoc.data().name;
+            const uData = userDoc.data();
+            currentUserName = uData.name || "";
+            currentUserIconUrl = uData.iconUrl || "";
         } else {
-            currentUserName = "名無しさん";
+            // GoogleログインなどでFirestoreドキュメントがまだない場合
+            currentUserName = user.displayName || "";
+            currentUserIconUrl = user.photoURL || "";
+            // 初期データを保存
+            await setDoc(userDocRef, {
+                uid: currentUserId,
+                name: currentUserName,
+                email: user.email,
+                iconUrl: currentUserIconUrl
+            });
         }
+        
+        // もし名前が登録されていない、もしくはデフォルトの場合は強制プロフィール設定モーダルを表示
+        const isNameInvalid = !currentUserName || currentUserName === "名無しさん" || currentUserName === "Googleユーザー" || currentUserName.trim() === "";
+        if (isNameInvalid) {
+            openProfileModal();
+        }
+
         memberMainTitle.textContent = `友だち (${currentUserName})`;
+        renderMyProfileCard();
         showScreen('member');
         
         startGlobalListener(); // メッセージ監視
@@ -176,10 +361,13 @@ function startMemberListListener() {
 
             const item = document.createElement('div');
             item.className = "list-item";
-            const shortName = uData.name.substring(0, 2);
+            const shortName = uData.name ? uData.name.substring(0, 2) : "友";
+            const iconHtml = uData.iconUrl
+                ? `<img src="${uData.iconUrl}" alt="アイコン">`
+                : shortName;
 
             item.innerHTML = `
-                <div class="item-icon">${shortName}</div>
+                <div class="item-icon">${iconHtml}</div>
                 <div class="item-info">
                     <div class="item-name">${uData.name}</div>
                     <div class="item-sub">タップして個人トークを開く</div>
@@ -215,6 +403,7 @@ async function sendMessage() {
             roomId: currentRoomId,
             userId: currentUserId,
             userName: currentUserName,
+            userIconUrl: currentUserIconUrl || "",
             messageText: text,
             type: "text",
             timestamp: serverTimestamp(),
@@ -226,16 +415,19 @@ async function sendMessage() {
 sendBtn.addEventListener('click', sendMessage);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-// 3. 無料の画像送信（Imgur連携）
+// 3. 画像送信（Imgur連携 ＆ 頑丈なBase64ダイレクト自動フォールバック）
 imageInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file || !currentUserId) return;
 
     sendBtn.disabled = true;
     sendBtn.textContent = "送信中";
+    
+    let imgUrl = "";
+
+    // 1. まずはImgurへのアップロードを試みる
     const formData = new FormData();
     formData.append('image', file);
-
     try {
         const response = await fetch('https://api.imgur.com/3/image', {
             method: 'POST',
@@ -243,21 +435,46 @@ imageInput.addEventListener('change', async (e) => {
             body: formData
         });
         const result = await response.json();
-
         if (result.success) {
-            const imgUrl = result.data.link; 
-            await addDoc(collection(db, "messages"), {
-                roomId: currentRoomId,
-                userId: currentUserId,
-                userName: currentUserName,
-                imageUrl: imgUrl,
-                type: "image",
-                timestamp: serverTimestamp(),
-                readUsers: [currentUserId]
-            });
-        } else { alert("画像の送信に失敗しました。"); }
-    } catch (err) { alert("画像送信エラー: " + err.message); }
-    finally { imageInput.value = ""; sendBtn.disabled = false; sendBtn.textContent = "送信"; }
+            imgUrl = result.data.link;
+        }
+    } catch (err) {
+        console.warn("Imgurへのアップロードが失敗しました。Base64での直接保存に切り替えます:", err);
+    }
+
+    // 2. Imgurが失敗した場合は、ローカルで軽量に圧縮してBase64文字列として直接Firestoreへ保存する
+    if (!imgUrl) {
+        try {
+            // トーク画像は最大800x800で充分高精細かつ軽量化
+            imgUrl = await compressAndConvertToBase64(file, 800, 800, 0.7);
+        } catch (compressErr) {
+            alert("画像の圧縮に失敗しました。");
+            sendBtn.disabled = false;
+            sendBtn.textContent = "送信";
+            imageInput.value = "";
+            return;
+        }
+    }
+
+    // 3. 取得したURLまたはBase64でメッセージを送信
+    try {
+        await addDoc(collection(db, "messages"), {
+            roomId: currentRoomId,
+            userId: currentUserId,
+            userName: currentUserName,
+            userIconUrl: currentUserIconUrl || "",
+            imageUrl: imgUrl,
+            type: "image",
+            timestamp: serverTimestamp(),
+            readUsers: [currentUserId]
+        });
+    } catch (err) {
+        alert("画像送信エラー: " + err.message);
+    } finally {
+        imageInput.value = "";
+        sendBtn.disabled = false;
+        sendBtn.textContent = "送信";
+    }
 });
 
 // 4. 部屋の移動
@@ -269,6 +486,9 @@ function openRoom(roomId, title) {
     if (unsubscribeChat) unsubscribeChat();
     chatLog.innerHTML = "";
     startChatLiveUpdate();
+    
+    // この部屋のメンバーとして自分を登録
+    registerRoomMember(roomId);
 }
 
 backBtn.addEventListener('click', () => {
@@ -276,6 +496,8 @@ backBtn.addEventListener('click', () => {
     if (unsubscribeChat) unsubscribeChat();
     currentRoomId = "";
     renderRoomList();
+    // ドロワーも閉じる
+    document.getElementById('groupDrawer').classList.remove('active');
 });
 
 function openPrivateChat(targetUserId, targetUserName) {
@@ -287,14 +509,75 @@ function openPrivateChat(targetUserId, targetUserName) {
     openRoom(privateRoomId, privateTitle);
 }
 
-// トーク表示名のカスタマイズ変更
-menuBtn.addEventListener('click', () => {
-    const currentTitle = chatTitle.textContent;
-    const newTitle = prompt("このトークの表示名を入力してください：", currentTitle);
-    if (newTitle !== null && newTitle.trim() !== "") {
-        const cleanTitle = newTitle.trim();
-        localStorage.setItem(`room_name_${currentRoomId}`, cleanTitle);
-        chatTitle.textContent = cleanTitle;
+// 部屋のメンバー一覧に自分を登録する
+async function registerRoomMember(roomId) {
+    if (!currentUserId || !currentUserName) return;
+    try {
+        const memberRef = doc(db, "rooms", roomId, "members", currentUserId);
+        await setDoc(memberRef, {
+            uid: currentUserId,
+            name: currentUserName,
+            iconUrl: currentUserIconUrl || "",
+            lastActive: serverTimestamp()
+        });
+    } catch (err) {
+        console.error("メンバー登録エラー:", err);
+    }
+}
+
+// グループ設定（ドロワー）を開く処理
+let unsubscribeDrawer = null;
+function openGroupDrawer() {
+    const drawer = document.getElementById('groupDrawer');
+    const memberListEl = document.getElementById('drawerMemberList');
+    const memberCountEl = document.getElementById('drawerMemberCount');
+    const nameInput = document.getElementById('drawerRoomNameInput');
+    
+    nameInput.value = chatTitle.textContent;
+    drawer.classList.add('active');
+    
+    if (unsubscribeDrawer) unsubscribeDrawer();
+    
+    // リアルタイムでその部屋のメンバー一覧を監視して描画
+    const membersRef = collection(db, "rooms", currentRoomId, "members");
+    unsubscribeDrawer = onSnapshot(membersRef, (snapshot) => {
+        memberListEl.innerHTML = "";
+        memberCountEl.textContent = `メンバー (${snapshot.size})`;
+        
+        snapshot.forEach((memberDoc) => {
+            const mData = memberDoc.data();
+            const shortName = mData.name ? mData.name.substring(0, 2) : "他";
+            const iconHtml = mData.iconUrl 
+                ? `<img src="${mData.iconUrl}" alt="アイコン">`
+                : shortName;
+                
+            const item = document.createElement('div');
+            item.className = "drawer-member-item";
+            item.innerHTML = `
+                <div class="drawer-member-icon">${iconHtml}</div>
+                <div class="drawer-member-name">${mData.name}</div>
+            `;
+            memberListEl.appendChild(item);
+        });
+    });
+}
+
+// ドロワーのイベント設定
+menuBtn.addEventListener('click', openGroupDrawer);
+
+document.getElementById('closeDrawerBtn').addEventListener('click', () => {
+    document.getElementById('groupDrawer').classList.remove('active');
+    if (unsubscribeDrawer) { unsubscribeDrawer(); unsubscribeDrawer = null; }
+});
+
+document.getElementById('drawerRoomNameSaveBtn').addEventListener('click', () => {
+    const newName = document.getElementById('drawerRoomNameInput').value.trim();
+    if (newName !== "") {
+        localStorage.setItem(`room_name_${currentRoomId}`, newName);
+        chatTitle.textContent = newName;
+        document.getElementById('groupDrawer').classList.remove('active');
+        if (unsubscribeDrawer) { unsubscribeDrawer(); unsubscribeDrawer = null; }
+        renderRoomList();
     }
 });
 
@@ -422,8 +705,11 @@ function startChatLiveUpdate() {
                 messageHtml.className = "message received";
                 const displayName = data.userName || "他";
                 const shortName = displayName.substring(0, 2);
+                const iconHtml = data.userIconUrl 
+                    ? `<img src="${data.userIconUrl}" alt="アバター">`
+                    : shortName;
                 messageHtml.innerHTML = `
-                    <div class="chat-avatar">${shortName}</div>
+                    <div class="chat-avatar">${iconHtml}</div>
                     <div class="bubble-wrapper">
                         <span class="user-name-label">${displayName}</span>
                         <div class="bubble">${contentHtml}</div>
