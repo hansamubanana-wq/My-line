@@ -1341,12 +1341,7 @@ function startChatLiveUpdate() {
             // リプライ引用枠の構築
             let replyQuoteHtml = "";
             if (data.replyTo) {
-                replyQuoteHtml = `
-                    <div class="reply-quote-box" data-target-id="${data.replyTo.id}">
-                        <div style="font-weight: bold; font-size: 0.75rem; margin-bottom: 2px;">${data.replyTo.userName}</div>
-                        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">${data.replyTo.messageText}</div>
-                    </div>
-                `;
+                replyQuoteHtml = `<div class="reply-quote-box" data-target-id="${data.replyTo.id}"><div style="font-weight: bold; font-size: 0.75rem; margin-bottom: 2px;">${data.replyTo.userName}</div><div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">${data.replyTo.messageText}</div></div>`;
             }
 
             let contentHtml = "";
@@ -1366,10 +1361,7 @@ function startChatLiveUpdate() {
             if (isMe) {
                 messageHtml.className = "message sent";
                 messageHtml.innerHTML = `
-                    <div class="${bubbleClass}">
-                        ${replyQuoteHtml}
-                        ${contentHtml}
-                    </div>
+                    <div class="${bubbleClass}">${replyQuoteHtml}${contentHtml}</div>
                     <div class="status-area">
                         <span class="read-status">${readText}</span>
                         <span class="time">${timeStr}</span>
@@ -1386,10 +1378,7 @@ function startChatLiveUpdate() {
                     <div class="chat-avatar">${iconHtml}</div>
                     <div class="bubble-wrapper">
                         <span class="user-name-label">${displayName}</span>
-                        <div class="${bubbleClass}">
-                            ${replyQuoteHtml}
-                            ${contentHtml}
-                        </div>
+                        <div class="${bubbleClass}">${replyQuoteHtml}${contentHtml}</div>
                     </div>
                     <div class="status-area"><span class="time">${timeStr}</span></div>
                 `;
