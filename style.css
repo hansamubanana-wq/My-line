@@ -621,3 +621,116 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 0, 0, 0.35);
 }
+
+/* ==========================================================================
+   インアプリ通知バナー & タブバーバッジのスタイル
+   ========================================================================== */
+.notification-banner {
+    position: absolute;
+    top: -85px; /* 初期位置は枠外に隠す */
+    left: 12px;
+    right: 12px;
+    background-color: rgba(39, 50, 70, 0.96); /* 高級感のある深い紺色の半透明 */
+    color: white;
+    padding: 12px 16px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    z-index: 2000; /* 最前面 */
+    transition: top 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: pointer;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.notification-banner.active {
+    top: 15px; /* チャット画面の内側に美しくスライドイン */
+}
+.notification-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #333;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+}
+.notification-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.notification-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.notification-title {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #a1c4fd;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.notification-text {
+    font-size: 0.85rem;
+    color: #f3f4f6;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.notification-close {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+.notification-close:hover {
+    color: white;
+}
+
+/* 下部タブバーの赤い未読バッジ */
+.tab-item {
+    position: relative; /* バッジを絶対配置するための基点 */
+}
+.tab-badge {
+    position: absolute;
+    top: 3px;
+    right: 28%;
+    background-color: #ef4444;
+    color: white;
+    font-size: 0.65rem;
+    font-weight: bold;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    animation: badge-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes badge-pop {
+    0% {
+        transform: scale(0);
+    }
+    100% {
+        transform: scale(1);
+    }
+}

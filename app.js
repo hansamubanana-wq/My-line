@@ -28,6 +28,10 @@ let allMessages = [];
 let roomsCache = {}; // { roomId: { name, iconUrl } }
 let usersCache = {}; // { uid: { name, iconUrl } }
 
+// 通知用変数
+let isInitialLoad = true;
+let bannerTimeout = null;
+
 // 画像の圧縮とBase64変換のユーティリティ関数
 function compressAndConvertToBase64(file, maxWidth = 800, maxHeight = 800, quality = 0.7) {
     return new Promise((resolve, reject) => {
@@ -102,6 +106,21 @@ function setScreenSize() {
 window.addEventListener('resize', setScreenSize);
 window.addEventListener('orientationchange', setScreenSize);
 setScreenSize();
+
+// インアプリ通知バナーの動的生成
+const chatContainer = document.querySelector('.chat-container');
+const notificationBanner = document.createElement('div');
+notificationBanner.id = 'notificationBanner';
+notificationBanner.className = 'notification-banner';
+notificationBanner.innerHTML = `
+    <div class="notification-icon" id="notiIcon">👤</div>
+    <div class="notification-info">
+        <div class="notification-title" id="notiTitle">新着メッセージ</div>
+        <div class="notification-text" id="notiText">メッセージがあります</div>
+    </div>
+    <button class="notification-close" id="notiCloseBtn">×</button>
+`;
+chatContainer.appendChild(notificationBanner);
 
 // 画面切り替え関数
 function showScreen(screenKey) {
@@ -743,10 +762,157 @@ function getSavedRoomName(roomId) { return localStorage.getItem(`room_name_${roo
 function startGlobalListener() {
     const qAll = query(collection(db, "messages"), orderBy("timestamp", "desc"));
     onSnapshot(qAll, (snapshot) => {
+        let newMessagesToNotify = [];
+        
+        // 新着メッセージ（added）を検知して通知対象に
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") {
+                const msg = { id: change.doc.id, ...change.doc.data() };
+                if (!isInitialLoad) {
+                    // 送信者が自分以外、かつ現在開いているトーク部屋以外のメッセージのみ通知
+                    if (msg.userId !== currentUserId && msg.roomId !== currentRoomId) {
+                        newMessagesToNotify.push(msg);
+                    }
+                }
+            }
+        });
+        
+        // 初回ロード完了フラグを設定
+        if (isInitialLoad && snapshot.size > 0) {
+            isInitialLoad = false;
+        }
+        
+        // 新着通知の実行（最新の1件）
+        if (newMessagesToNotify.length > 0) {
+            newMessagesToNotify.sort((a, b) => {
+                const timeA = a.timestamp ? a.timestamp.toDate().getTime() : 0;
+                const timeB = b.timestamp ? b.timestamp.toDate().getTime() : 0;
+                return timeB - timeA;
+            });
+            showInAppNotification(newMessagesToNotify[0]);
+        }
+
         allMessages = [];
         snapshot.forEach(doc => { allMessages.push({ id: doc.id, ...doc.data() }); });
         renderRoomList(); 
+        updateTabBadges(); // タブバッジのリアルタイム更新
     });
+}
+
+// インアプリ通知バナーの描画
+function showInAppNotification(msg) {
+    const banner = document.getElementById('notificationBanner');
+    const notiIcon = document.getElementById('notiIcon');
+    const notiTitle = document.getElementById('notiTitle');
+    const notiText = document.getElementById('notiText');
+    
+    const senderName = msg.userName || "誰か";
+    const shortName = senderName.substring(0, 2);
+    
+    // アイコン画像があれば表示、なければ文字
+    if (msg.userIconUrl) {
+        notiIcon.innerHTML = `<img src="${msg.userIconUrl}" alt="アバター">`;
+    } else {
+        notiIcon.textContent = shortName;
+        notiIcon.style.background = "linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)";
+    }
+    
+    // タイトルの調整
+    let titleText = senderName;
+    if (msg.roomId === "global_group") {
+        titleText = `全体チャット - ${senderName}`;
+    } else if (msg.roomId.startsWith("custom_")) {
+        const details = getRoomDetails(msg.roomId);
+        titleText = `${details.name} - ${senderName}`;
+    } else if (msg.roomId.startsWith("private_")) {
+        titleText = `個人トーク - ${senderName}`;
+    }
+    
+    notiTitle.textContent = titleText;
+    notiText.textContent = msg.type === "image" ? "[画像が送信されました]" : msg.messageText;
+    
+    // クリックされたらそのトークルームを開く
+    const newBanner = banner.cloneNode(true);
+    banner.parentNode.replaceChild(newBanner, banner);
+    
+    newBanner.addEventListener('click', (e) => {
+        if (e.target.id === 'notiCloseBtn') return;
+        
+        let roomTitle = "トーク";
+        if (msg.roomId === "global_group") {
+            roomTitle = "グループチャット（全体）";
+        } else if (msg.roomId.startsWith("custom_")) {
+            const details = getRoomDetails(msg.roomId);
+            roomTitle = details.name;
+        } else if (msg.roomId.startsWith("private_")) {
+            roomTitle = senderName;
+        }
+        openRoom(msg.roomId, roomTitle);
+        newBanner.classList.remove('active');
+    });
+    
+    newBanner.querySelector('#notiCloseBtn').addEventListener('click', () => {
+        newBanner.classList.remove('active');
+    });
+    
+    newBanner.classList.add('active');
+    
+    if (bannerTimeout) clearTimeout(bannerTimeout);
+    bannerTimeout = setTimeout(() => {
+        newBanner.classList.remove('active');
+    }, 4000);
+}
+
+// 下部タブバーの赤い未読数バッジの更新
+function updateTabBadges() {
+    let totalUnread = 0;
+    const roomsUnread = {};
+    
+    allMessages.forEach(msg => {
+        if (!msg.timestamp) return;
+        let rId = msg.roomId || "global_group";
+        let isForMe = false;
+        
+        if (rId === "global_group") {
+            isForMe = true;
+        } else if (rId.startsWith("custom_")) {
+            isForMe = true;
+        } else if (currentUserId && currentUserId !== "null" && currentUserId !== "undefined" && rId.startsWith("private_") && rId.includes(currentUserId)) {
+            isForMe = true;
+        }
+        
+        if (isForMe) {
+            if (roomsUnread[rId] === undefined) roomsUnread[rId] = 0;
+            if (msg.userId !== currentUserId && (!msg.readUsers || !msg.readUsers.includes(currentUserId))) {
+                roomsUnread[rId]++;
+            }
+        }
+    });
+    
+    Object.keys(roomsUnread).forEach(rId => {
+        totalUnread += roomsUnread[rId];
+    });
+    
+    const tabTalk = document.getElementById('tabTalk');
+    const tabTalk2 = document.getElementById('tabTalk2');
+    if (!tabTalk || !tabTalk2) return;
+    
+    const existingBadge1 = tabTalk.querySelector('.tab-badge');
+    if (existingBadge1) existingBadge1.remove();
+    const existingBadge2 = tabTalk2.querySelector('.tab-badge');
+    if (existingBadge2) existingBadge2.remove();
+    
+    if (totalUnread > 0) {
+        const badgeSpan1 = document.createElement('span');
+        badgeSpan1.className = 'tab-badge';
+        badgeSpan1.textContent = totalUnread > 99 ? '99+' : totalUnread;
+        tabTalk.appendChild(badgeSpan1);
+        
+        const badgeSpan2 = document.createElement('span');
+        badgeSpan2.className = 'tab-badge';
+        badgeSpan2.textContent = totalUnread > 99 ? '99+' : totalUnread;
+        tabTalk2.appendChild(badgeSpan2);
+    }
 }
 
 function renderRoomList() {
