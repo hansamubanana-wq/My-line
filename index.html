@@ -56,8 +56,8 @@
             </div>
         </div>
         <div class="create-room-box">
-            <input type="text" id="roomInput" class="room-create-input" placeholder="合言葉を入れると新しいグループを作成">
-            <button id="saveRoomBtn" class="room-create-btn">作成</button>
+            <input type="text" id="roomInput" class="room-create-input" placeholder="合言葉でグループに参加、または新規作成">
+            <button id="saveRoomBtn" class="room-create-btn">参加・作成</button>
         </div>
         <div class="list-content" id="roomList"></div>
         <div class="tab-bar">
@@ -99,6 +99,26 @@
             <div class="modal-btn-group">
                 <button id="profileSaveBtn" class="modal-btn save">保存</button>
                 <button id="profileCloseBtn" class="modal-btn cancel">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- グループ新規作成モーダル -->
+    <div id="createRoomModal" class="modal">
+        <div class="modal-content">
+            <h3>グループ作成</h3>
+            <div class="profile-avatar-container">
+                <div id="createRoomModalIcon" class="profile-avatar-preview">👥</div>
+                <label for="createRoomIconInput" class="avatar-upload-btn">アイコンを選択</label>
+                <input type="file" id="createRoomIconInput" accept="image/*" style="display:none;">
+            </div>
+            <div class="modal-input-group">
+                <label for="createRoomModalName">グループ名 (必須)</label>
+                <input type="text" id="createRoomModalName" placeholder="グループ名を入力してください">
+            </div>
+            <div class="modal-btn-group">
+                <button id="createRoomModalBtn" class="modal-btn save">作成</button>
+                <button id="createRoomCloseBtn" class="modal-btn cancel">キャンセル</button>
             </div>
         </div>
     </div>

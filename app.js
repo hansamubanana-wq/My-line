@@ -24,6 +24,10 @@ let isSignUpMode = false; // ログインか新規登録かの切り替えフラ
 let unsubscribeChat = null;
 let allMessages = []; 
 
+// キャッシュオブジェクト（リアルタイム同期用）
+let roomsCache = {}; // { roomId: { name, iconUrl } }
+let usersCache = {}; // { uid: { name, iconUrl } }
+
 // 画像の圧縮とBase64変換のユーティリティ関数
 function compressAndConvertToBase64(file, maxWidth = 800, maxHeight = 800, quality = 0.7) {
     return new Promise((resolve, reject) => {
@@ -283,6 +287,88 @@ profileCloseBtn.addEventListener('click', () => {
     profileModal.classList.remove('active');
 });
 
+// --- グループ新規作成モーダルの処理 ---
+const createRoomModal = document.getElementById('createRoomModal');
+const createRoomModalName = document.getElementById('createRoomModalName');
+const createRoomModalIcon = document.getElementById('createRoomModalIcon');
+const createRoomIconInput = document.getElementById('createRoomIconInput');
+const createRoomModalBtn = document.getElementById('createRoomModalBtn');
+const createRoomCloseBtn = document.getElementById('createRoomCloseBtn');
+
+let tempRoomIconBase64 = "";
+let pendingRoomKeyword = ""; // 合言葉を新規作成時に引き継ぐ
+
+function openCreateRoomModal(keyword = "") {
+    createRoomModalName.value = keyword;
+    tempRoomIconBase64 = "";
+    pendingRoomKeyword = keyword.trim();
+    createRoomModalIcon.textContent = "👥";
+    createRoomModal.classList.add('active');
+}
+
+createRoomIconInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+        const compressedBase64 = await compressAndConvertToBase64(file, 150, 150, 0.8);
+        tempRoomIconBase64 = compressedBase64;
+        createRoomModalIcon.innerHTML = `<img src="${compressedBase64}" alt="グループアイコン">`;
+    } catch (err) {
+        alert("画像の読み込みに失敗しました。");
+    }
+});
+
+createRoomModalBtn.addEventListener('click', async () => {
+    const name = createRoomModalName.value.trim();
+    if (!name) {
+        alert("グループ名を入力してください！");
+        return;
+    }
+    if (!tempRoomIconBase64) {
+        alert("グループアイコンを設定してください！");
+        return;
+    }
+    
+    createRoomModalBtn.disabled = true;
+    createRoomModalBtn.textContent = "作成中...";
+    
+    try {
+        let roomId = "";
+        if (pendingRoomKeyword) {
+            roomId = "custom_" + pendingRoomKeyword;
+        } else {
+            const newRoomRef = doc(collection(db, "rooms"));
+            roomId = "custom_" + newRoomRef.id;
+        }
+        
+        await setDoc(doc(db, "rooms", roomId), {
+            roomId: roomId,
+            name: name,
+            iconUrl: tempRoomIconBase64,
+            createdBy: currentUserId,
+            createdAt: serverTimestamp()
+        });
+        
+        roomsCache[roomId] = {
+            name: name,
+            iconUrl: tempRoomIconBase64
+        };
+        
+        openRoom(roomId, name);
+        createRoomModal.classList.remove('active');
+        roomInput.value = "";
+    } catch (err) {
+        alert("グループ作成エラー: " + err.message);
+    } finally {
+        createRoomModalBtn.disabled = false;
+        createRoomModalBtn.textContent = "作成";
+    }
+});
+
+createRoomCloseBtn.addEventListener('click', () => {
+    createRoomModal.classList.remove('active');
+});
+
 // 自分カードの描画関数
 function renderMyProfileCard() {
     const container = document.getElementById('myProfileCardContainer');
@@ -306,6 +392,40 @@ function renderMyProfileCard() {
     document.getElementById('myProfileCardBtn').addEventListener('click', () => {
         openProfileModal();
     });
+}
+
+// 部屋（グループ）情報のリアルタイム監視を追加
+let roomsListenerUnsubscribe = null;
+function startRoomsListener() {
+    if (roomsListenerUnsubscribe) roomsListenerUnsubscribe();
+    
+    roomsListenerUnsubscribe = onSnapshot(collection(db, "rooms"), (snapshot) => {
+        snapshot.forEach((roomDoc) => {
+            const rData = roomDoc.data();
+            roomsCache[roomDoc.id] = {
+                name: rData.name,
+                iconUrl: rData.iconUrl
+            };
+        });
+        renderRoomList(); // 部屋一覧の表示名をリアルタイム反映
+    });
+}
+
+function getRoomDetails(roomId) {
+    if (roomId === "global_group") {
+        return { name: "グループチャット（全体）", iconUrl: "" };
+    }
+    if (roomsCache[roomId]) {
+        return roomsCache[roomId];
+    }
+    // 古いデータ用のフォールバック
+    const saved = localStorage.getItem(`room_name_${roomId}`);
+    if (saved) return { name: saved, iconUrl: "" };
+    
+    if (roomId.startsWith("custom_")) {
+        return { name: "グループ: " + roomId.replace("custom_", ""), iconUrl: "" };
+    }
+    return { name: "グループチャット", iconUrl: "" };
 }
 
 // 認証状態の監視
@@ -345,6 +465,7 @@ onAuthStateChanged(auth, async (user) => {
         
         startGlobalListener(); // メッセージ監視
         startMemberListListener(); // 参加者一覧監視
+        startRoomsListener(); // グループ一覧の監視を開始
     } else {
         showScreen('auth');
         authName.style.display = "none";
@@ -357,6 +478,12 @@ function startMemberListListener() {
         memberList.innerHTML = "";
         snapshot.forEach((userDoc) => {
             const uData = userDoc.data();
+            // ユーザー情報をキャッシュに蓄積（個人トークの表示用）
+            usersCache[uData.uid] = {
+                name: uData.name,
+                iconUrl: uData.iconUrl || ""
+            };
+
             if(uData.uid === currentUserId) return; // 自分は一覧に出さない
 
             const item = document.createElement('div');
@@ -385,11 +512,20 @@ function startMemberListListener() {
 // 合言葉部屋の作成・参加
 saveRoomBtn.addEventListener('click', () => {
     const pw = roomInput.value.trim();
-    if (pw !== "") {
+    if (pw === "") {
+        // 合言葉が空なら、完全に新規でグループ作成モーダルを開く
+        openCreateRoomModal("");
+        return;
+    }
+    
+    const roomId = "custom_" + pw;
+    if (roomsCache[roomId]) {
+        // すでにグループが存在していれば、その部屋に入る
+        openRoom(roomId, roomsCache[roomId].name);
         roomInput.value = "";
-        const customRoomId = "custom_" + pw;
-        const customTitle = getSavedRoomName(customRoomId) || `グループ: ${pw}`;
-        openRoom(customRoomId, customTitle);
+    } else {
+        // グループが存在しなければ、入力された合言葉を初期値として新規グループ作成画面を開く
+        openCreateRoomModal(pw);
     }
 });
 
@@ -480,7 +616,27 @@ imageInput.addEventListener('change', async (e) => {
 // 4. 部屋の移動
 function openRoom(roomId, title) {
     currentRoomId = roomId;
-    chatTitle.textContent = title;
+    
+    let iconUrl = "";
+    let roomTitleName = title;
+    if (roomId.startsWith("private_")) {
+        const otherUserId = roomId.replace("private_", "").split("_").find(id => id !== currentUserId);
+        const otherUser = usersCache[otherUserId];
+        roomTitleName = otherUser ? otherUser.name : title;
+        iconUrl = otherUser ? otherUser.iconUrl : "";
+    } else {
+        const details = getRoomDetails(roomId);
+        roomTitleName = details.name;
+        iconUrl = details.iconUrl;
+    }
+    
+    // ヘッダーに丸い小さなアイコンと部屋名を描画
+    const iconHtml = iconUrl 
+        ? `<img src="${iconUrl}" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.4); margin-right: 4px;">`
+        : "";
+    
+    chatTitle.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; gap: 8px;">${iconHtml}<span>${roomTitleName}</span></div>`;
+    
     showScreen('room');
 
     if (unsubscribeChat) unsubscribeChat();
@@ -595,32 +751,53 @@ function startGlobalListener() {
 
 function renderRoomList() {
     roomList.innerHTML = "";
-    const globalCustomName = getSavedRoomName("global_group") || "グループチャット（全体）";
     const roomsData = {};
-    roomsData["global_group"] = { name: globalCustomName, lastMsg: "まだメッセージはありません", unread: 0, timestamp: 0 };
+    
+    // 全体チャットの初期化
+    const globalDetails = getRoomDetails("global_group");
+    roomsData["global_group"] = { 
+        name: globalDetails.name, 
+        iconUrl: globalDetails.iconUrl,
+        lastMsg: "まだメッセージはありません", 
+        unread: 0, 
+        timestamp: 0 
+    };
 
     allMessages.forEach(msg => {
         if (!msg.timestamp) return;
         let rId = msg.roomId || "global_group";
         let isForMe = false;
-        let roomName = "";
 
         if (rId === "global_group") {
             isForMe = true;
-            roomName = getSavedRoomName("global_group") || "グループチャット（全体）";
         } else if (rId.startsWith("custom_")) {
             isForMe = true;
-            roomName = getSavedRoomName(rId) || "グループ: " + rId.replace("custom_", "");
         } else if (currentUserId && currentUserId !== "null" && currentUserId !== "undefined" && rId.startsWith("private_") && rId.includes(currentUserId)) {
             isForMe = true;
-            const defaultName = msg.userId === currentUserId ? "個人トーク" : msg.userName;
-            roomName = getSavedRoomName(rId) || defaultName;
         }
 
         if (isForMe) {
-            if (!roomsData[rId]) { roomsData[rId] = { name: roomName, lastMsg: "", unread: 0, timestamp: 0 }; }
-            const savedName = getSavedRoomName(rId);
-            if (savedName) { roomsData[rId].name = savedName; }
+            let roomName = "";
+            let roomIcon = "";
+            
+            if (rId.startsWith("private_")) {
+                const otherUserId = rId.replace("private_", "").split("_").find(id => id !== currentUserId);
+                const otherUser = usersCache[otherUserId];
+                roomName = otherUser ? otherUser.name : "個人トーク";
+                roomIcon = otherUser ? otherUser.iconUrl : "";
+            } else {
+                const details = getRoomDetails(rId);
+                roomName = details.name;
+                roomIcon = details.iconUrl;
+            }
+
+            if (!roomsData[rId]) { 
+                roomsData[rId] = { name: roomName, iconUrl: roomIcon, lastMsg: "", unread: 0, timestamp: 0 }; 
+            } else {
+                // キャッシュ情報があれば上書きして常に最新に
+                roomsData[rId].name = roomName;
+                roomsData[rId].iconUrl = roomIcon;
+            }
 
             if (roomsData[rId].timestamp === 0) {
                 roomsData[rId].lastMsg = msg.type === "image" ? "[画像]" : `${msg.userName}: ${msg.messageText}`;
@@ -637,11 +814,14 @@ function renderRoomList() {
         const room = roomsData[roomId];
         const item = document.createElement('div');
         item.className = "list-item";
-        const shortName = room.name.substring(0, 2);
+        const shortName = room.name ? room.name.substring(0, 2) : "ト";
         const badgeHtml = room.unread > 0 ? `<span class="room-badge">${room.unread}</span>` : "";
+        const iconHtml = room.iconUrl 
+            ? `<img src="${room.iconUrl}" alt="アイコン">`
+            : shortName;
 
         item.innerHTML = `
-            <div class="item-icon">${shortName}</div>
+            <div class="item-icon">${iconHtml}</div>
             <div class="item-info">
                 <div class="item-name">${room.name}</div>
                 <div class="item-sub">${room.lastMsg}</div>
