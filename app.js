@@ -485,6 +485,11 @@ onAuthStateChanged(auth, async (user) => {
         startGlobalListener(); // メッセージ監視
         startMemberListListener(); // 参加者一覧監視
         startRoomsListener(); // グループ一覧の監視を開始
+        
+        // 🌟 ネイティブOS通知（端末標準の通知）の許可を申請
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
     } else {
         showScreen('auth');
         authName.style.display = "none";
@@ -799,7 +804,7 @@ function startGlobalListener() {
     });
 }
 
-// インアプリ通知バナーの描画
+// インアプリ通知バナーの描画 ＆ OS標準通知の実行
 function showInAppNotification(msg) {
     const banner = document.getElementById('notificationBanner');
     const notiIcon = document.getElementById('notiIcon');
@@ -828,10 +833,44 @@ function showInAppNotification(msg) {
         titleText = `個人トーク - ${senderName}`;
     }
     
-    notiTitle.textContent = titleText;
-    notiText.textContent = msg.type === "image" ? "[画像が送信されました]" : msg.messageText;
+    const messageContent = msg.type === "image" ? "[画像が送信されました]" : msg.messageText;
     
-    // クリックされたらそのトークルームを開く
+    notiTitle.textContent = titleText;
+    notiText.textContent = messageContent;
+    
+    // ----------------------------------------------------------------------
+    // 🌟 OS標準通知（端末のネイティブ通知）の送信
+    // ----------------------------------------------------------------------
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+            const systemNoti = new Notification(titleText, {
+                body: messageContent,
+                icon: msg.userIconUrl || 'https://www.gstatic.com/images/branding/product/2x/avatar_square_blue_120dp.png', // アイコンがない場合のデフォルト
+                tag: msg.roomId, // 同じ部屋の通知はスタックさせる
+                renotify: true   // 新しいメッセージの到着を音や振動で通知
+            });
+            
+            // 通知をクリックした際にアプリウィンドウを前面に出し、そのトークルームを開く
+            systemNoti.onclick = () => {
+                window.focus();
+                let roomTitle = "トーク";
+                if (msg.roomId === "global_group") {
+                    roomTitle = "グループチャット（全体）";
+                } else if (msg.roomId.startsWith("custom_")) {
+                    const details = getRoomDetails(msg.roomId);
+                    roomTitle = details.name;
+                } else if (msg.roomId.startsWith("private_")) {
+                    roomTitle = senderName;
+                }
+                openRoom(msg.roomId, roomTitle);
+                systemNoti.close();
+            };
+        } catch (e) {
+            console.error("OS標準通知の送信に失敗しました:", e);
+        }
+    }
+    
+    // クリックされたらそのトークルームを開く（インアプリバナー用）
     const newBanner = banner.cloneNode(true);
     banner.parentNode.replaceChild(newBanner, banner);
     
