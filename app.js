@@ -117,7 +117,7 @@ const actionAnnounceBtn = document.getElementById('actionAnnounceBtn');
 const actionUnsendBtn = document.getElementById('actionUnsendBtn');
 const actionCloseBtn = document.getElementById('actionCloseBtn');
 
-const STICKERS = ["🐱", "🐶", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦"];
+const STICKERS = ["🐱", "🐶", "🐰", "🦊", "🐻", "🐼", "🐨", "🐱", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦"];
 
 // スタンプ選択パネルの初期化
 STICKERS.forEach(sticker => {
@@ -324,7 +324,7 @@ profileSaveBtn.addEventListener('click', async () => {
         }
     } catch (err) {
         alert("保存エラー: " + err.message);
-    } finaly {
+    } finally { // ✕ 「finaly」のタイポを「finally」に修正！
         profileSaveBtn.disabled = false;
         profileSaveBtn.textContent = "保存";
     }
@@ -406,7 +406,7 @@ createRoomModalBtn.addEventListener('click', async () => {
         roomInput.value = "";
     } catch (err) {
         alert("グループ作成エラー: " + err.message);
-    } finaly {
+    } finally { // ✕ ここも修正
         createRoomModalBtn.disabled = false;
         createRoomModalBtn.textContent = "作成";
     }
@@ -675,7 +675,7 @@ imageInput.addEventListener('change', async (e) => {
         });
     } catch (err) {
         alert("画像送信エラー: " + err.message);
-    } finaly {
+    } finally { // ✕ 「finaly」のタイポを「finally」に修正！
         imageInput.value = "";
         sendBtn.disabled = false;
         sendBtn.textContent = "送信";
@@ -956,7 +956,7 @@ document.getElementById('drawerRoomNameSaveBtn').addEventListener('click', () =>
 
 function getSavedRoomName(roomId) { return localStorage.getItem(`room_name_${roomId}`); }
 
-// 5. 【修正済】グローバルメッセージ監視（個人チャットの通知バグ対策完了）
+// 5. グローバルメッセージ監視
 function startGlobalListener() {
     const qAll = query(collection(db, "messages"), orderBy("timestamp", "desc"));
     onSnapshot(qAll, (snapshot) => {
