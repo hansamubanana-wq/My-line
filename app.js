@@ -138,7 +138,6 @@ if (stickerBtn && stickerPicker) {
     });
 }
 
-
 function setScreenSize() {
     let vh = window.innerHeight * 0.01;
     document.documentElement.style.setProperty('--vh', `${vh}px`);
@@ -201,7 +200,6 @@ authBtn.addEventListener('click', async () => {
         if(!name) { alert("お名前を入力してください！"); return; }
         try {
             const res = await createUserWithEmailAndPassword(auth, email, password);
-            // 登録成功したら、Firestoreの「users」コレクションにユーザー情報を保存
             await setDoc(doc(db, "users", res.user.uid), {
                 uid: res.user.uid,
                 name: name,
@@ -223,19 +221,16 @@ googleAuthBtn.addEventListener('click', async () => {
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
         
-        // ログイン成功したら、Firestoreの「users」コレクションにユーザー情報が存在するか確認
         const userDocRef = doc(db, "users", user.uid);
         const userDoc = await getDoc(userDocRef);
         
         if(!userDoc.exists()) {
-            // Firestoreにまだ登録されていない場合は、Googleプロファイルの情報で作成
             await setDoc(userDocRef, {
                 uid: user.uid,
                 name: user.displayName || "Googleユーザー",
                 email: user.email
             });
         }
-        // 状態監視のonAuthStateChangedが自動で検知して画面を切り替えます
     } catch(err) {
         alert("Googleログインエラー: " + err.message);
     }
@@ -246,7 +241,6 @@ const logout = () => { signOut(auth); localStorage.clear(); location.reload(); }
 document.getElementById('logoutBtn1').addEventListener('click', logout);
 document.getElementById('logoutBtn2').addEventListener('click', logout);
 
-// 認証状態の監視
 // --- プロフィール編集モーダルの処理 ---
 const profileModal = document.getElementById('profileModal');
 const profileModalName = document.getElementById('profileModalName');
@@ -256,7 +250,6 @@ const profileSaveBtn = document.getElementById('profileSaveBtn');
 const profileCloseBtn = document.getElementById('profileCloseBtn');
 
 let tempProfileIconBase64 = "";
-
 const profileModalStatus = document.getElementById('profileModalStatus');
 
 function openProfileModal() {
@@ -264,10 +257,8 @@ function openProfileModal() {
     profileModalStatus.value = currentUserStatus || "";
     tempProfileIconBase64 = currentUserIconUrl || "";
     
-    // アイコンのプレビュー更新
     updateProfileModalPreview(tempProfileIconBase64);
     
-    // 名無しさん・Googleユーザーの場合は強制設定にするため閉じるボタンを隠す
     const isNameInvalid = !currentUserName || currentUserName === "名無しさん" || currentUserName === "Googleユーザー" || currentUserName.trim() === "";
     if (isNameInvalid) {
         profileCloseBtn.style.display = "none";
@@ -287,12 +278,10 @@ function updateProfileModalPreview(url) {
     }
 }
 
-// ファイル選択時の圧縮処理
 profileIconInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     try {
-        // アイコン画像は150x150で充分高精細かつ軽量
         const compressedBase64 = await compressAndConvertToBase64(file, 150, 150, 0.8);
         tempProfileIconBase64 = compressedBase64;
         updateProfileModalPreview(compressedBase64);
@@ -301,7 +290,6 @@ profileIconInput.addEventListener('change', async (e) => {
     }
 });
 
-// プロフィール保存
 profileSaveBtn.addEventListener('click', async () => {
     const newName = profileModalName.value.trim();
     const newStatus = profileModalStatus.value.trim();
@@ -327,22 +315,16 @@ profileSaveBtn.addEventListener('click', async () => {
         currentUserIconUrl = tempProfileIconBase64;
         currentUserStatus = newStatus;
         
-        // 友達タイトルも更新
         memberMainTitle.textContent = `友だち (${currentUserName})`;
-        
-        // 自分カードの更新
         renderMyProfileCard();
-        
-        // プロフィールが正しく入力されたらモーダルを閉じる
         profileModal.classList.remove('active');
         
-        // 各種トークの自分のメンバー情報も更新登録
         if (currentRoomId) {
             registerRoomMember(currentRoomId);
         }
     } catch (err) {
         alert("保存エラー: " + err.message);
-    } finally {
+    } finaly {
         profileSaveBtn.disabled = false;
         profileSaveBtn.textContent = "保存";
     }
@@ -361,7 +343,7 @@ const createRoomModalBtn = document.getElementById('createRoomModalBtn');
 const createRoomCloseBtn = document.getElementById('createRoomCloseBtn');
 
 let tempRoomIconBase64 = "";
-let pendingRoomKeyword = ""; // 合言葉を新規作成時に引き継ぐ
+let pendingRoomKeyword = ""; 
 
 function openCreateRoomModal(keyword = "") {
     createRoomModalName.value = keyword;
@@ -424,7 +406,7 @@ createRoomModalBtn.addEventListener('click', async () => {
         roomInput.value = "";
     } catch (err) {
         alert("グループ作成エラー: " + err.message);
-    } finally {
+    } finaly {
         createRoomModalBtn.disabled = false;
         createRoomModalBtn.textContent = "作成";
     }
@@ -434,7 +416,6 @@ createRoomCloseBtn.addEventListener('click', () => {
     createRoomModal.classList.remove('active');
 });
 
-// 自分カードの描画関数
 function renderMyProfileCard() {
     const container = document.getElementById('myProfileCardContainer');
     if (!container) return;
@@ -463,7 +444,6 @@ function renderMyProfileCard() {
     });
 }
 
-// 部屋（グループ）情報のリアルタイム監視を追加
 let roomsListenerUnsubscribe = null;
 function startRoomsListener() {
     if (roomsListenerUnsubscribe) roomsListenerUnsubscribe();
@@ -476,7 +456,7 @@ function startRoomsListener() {
                 iconUrl: rData.iconUrl
             };
         });
-        renderRoomList(); // 部屋一覧の表示名をリアルタイム反映
+        renderRoomList(); 
     });
 }
 
@@ -487,7 +467,6 @@ function getRoomDetails(roomId) {
     if (roomsCache[roomId]) {
         return roomsCache[roomId];
     }
-    // 古いデータ用のフォールバック
     const saved = localStorage.getItem(`room_name_${roomId}`);
     if (saved) return { name: saved, iconUrl: "" };
     
@@ -501,7 +480,6 @@ function getRoomDetails(roomId) {
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUserId = user.uid;
-        // データベースからログインした人の情報を取得
         const userDocRef = doc(db, "users", currentUserId);
         const userDoc = await getDoc(userDocRef);
         
@@ -511,19 +489,16 @@ onAuthStateChanged(auth, async (user) => {
             currentUserIconUrl = uData.iconUrl || "";
             currentUserStatus = uData.status || "";
         } else {
-            // GoogleログインなどでFirestoreドキュメントがまだない場合
             currentUserName = user.displayName || "";
             currentUserIconUrl = user.photoURL || "";
-            // 初期データを保存
             await setDoc(userDocRef, {
-                uid: currentUserId,
+                uid: user.uid,
                 name: currentUserName,
                 email: user.email,
                 iconUrl: currentUserIconUrl
             });
         }
         
-        // もし名前が登録されていない、もしくはデフォルトの場合は強制プロフィール設定モーダルを表示
         const isNameInvalid = !currentUserName || currentUserName === "名無しさん" || currentUserName === "Googleユーザー" || currentUserName.trim() === "";
         if (isNameInvalid) {
             openProfileModal();
@@ -533,11 +508,10 @@ onAuthStateChanged(auth, async (user) => {
         renderMyProfileCard();
         showScreen('member');
         
-        startGlobalListener(); // メッセージ監視
-        startMemberListListener(); // 参加者一覧監視
-        startRoomsListener(); // グループ一覧の監視を開始
+        startGlobalListener(); 
+        startMemberListListener(); 
+        startRoomsListener(); 
         
-        // 🌟 ネイティブOS通知（端末標準の通知）の許可を申請
         if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
             Notification.requestPermission();
         }
@@ -547,20 +521,18 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// ★新機能：参加メンバー（ユーザー）一覧を取得して描画する
 function startMemberListListener() {
     onSnapshot(collection(db, "users"), (snapshot) => {
         memberList.innerHTML = "";
         snapshot.forEach((userDoc) => {
             const uData = userDoc.data();
-            // ユーザー情報をキャッシュに蓄積（個人トークの表示用）
             usersCache[uData.uid] = {
                 name: uData.name,
                 iconUrl: uData.iconUrl || "",
                 status: uData.status || ""
             };
 
-            if(uData.uid === currentUserId) return; // 自分は一覧に出さない
+            if(uData.uid === currentUserId) return; 
 
             const item = document.createElement('div');
             item.className = "list-item";
@@ -581,7 +553,6 @@ function startMemberListListener() {
                     <div class="item-sub" style="margin-top: 2px;">タップして個人トークを開く</div>
                 </div>
             `;
-            // メンバーをタップしたら自動で個人トークを開始！
             item.addEventListener('click', () => {
                 openPrivateChat(uData.uid, uData.name);
             });
@@ -590,27 +561,22 @@ function startMemberListListener() {
     });
 }
 
-// 合言葉部屋の作成・参加
 saveRoomBtn.addEventListener('click', () => {
     const pw = roomInput.value.trim();
     if (pw === "") {
-        // 合言葉が空なら、完全に新規でグループ作成モーダルを開く
         openCreateRoomModal("");
         return;
     }
     
     const roomId = "custom_" + pw;
     if (roomsCache[roomId]) {
-        // すでにグループが存在していれば、その部屋に入る
         openRoom(roomId, roomsCache[roomId].name);
         roomInput.value = "";
     } else {
-        // グループが存在しなければ、入力された合言葉を初期値として新規グループ作成画面を開く
         openCreateRoomModal(pw);
     }
 });
 
-// 2. 文字送信
 async function sendMessage() {
     const text = chatInput.value.trim();
     if (text === "" || !currentUserId) return;
@@ -634,7 +600,6 @@ async function sendMessage() {
         await addDoc(collection(db, "messages"), messageData);
         chatInput.value = "";
 
-        // リプライを解除
         replyToMessage = null;
         if (replyPreviewBox) replyPreviewBox.classList.remove('active');
     } catch (err) { alert("送信失敗: " + err.message); }
@@ -642,7 +607,6 @@ async function sendMessage() {
 sendBtn.addEventListener('click', sendMessage);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-// 2-2. スタンプ送信
 async function sendSticker(sticker) {
     if (!currentUserId || !currentRoomId) return;
     try {
@@ -661,8 +625,6 @@ async function sendSticker(sticker) {
     }
 }
 
-
-// 3. 画像送信（Imgur連携 ＆ 頑丈なBase64ダイレクト自動フォールバック）
 imageInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file || !currentUserId) return;
@@ -672,7 +634,6 @@ imageInput.addEventListener('change', async (e) => {
     
     let imgUrl = "";
 
-    // 1. まずはImgurへのアップロードを試みる
     const formData = new FormData();
     formData.append('image', file);
     try {
@@ -689,10 +650,8 @@ imageInput.addEventListener('change', async (e) => {
         console.warn("Imgurへのアップロードが失敗しました。Base64での直接保存に切り替えます:", err);
     }
 
-    // 2. Imgurが失敗した場合は、ローカルで軽量に圧縮してBase64文字列として直接Firestoreへ保存する
     if (!imgUrl) {
         try {
-            // トーク画像は最大800x800で充分高精細かつ軽量化
             imgUrl = await compressAndConvertToBase64(file, 800, 800, 0.7);
         } catch (compressErr) {
             alert("画像の圧縮に失敗しました。");
@@ -703,7 +662,6 @@ imageInput.addEventListener('change', async (e) => {
         }
     }
 
-    // 3. 取得したURLまたはBase64でメッセージを送信
     try {
         await addDoc(collection(db, "messages"), {
             roomId: currentRoomId,
@@ -717,14 +675,13 @@ imageInput.addEventListener('change', async (e) => {
         });
     } catch (err) {
         alert("画像送信エラー: " + err.message);
-    } finally {
+    } finaly {
         imageInput.value = "";
         sendBtn.disabled = false;
         sendBtn.textContent = "送信";
     }
 });
 
-// 4. 部屋の移動
 function openRoom(roomId, title) {
     currentRoomId = roomId;
     
@@ -741,7 +698,6 @@ function openRoom(roomId, title) {
         iconUrl = details.iconUrl;
     }
     
-    // ヘッダーに丸い小さなアイコンと部屋名を描画
     const iconHtml = iconUrl 
         ? `<img src="${iconUrl}" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.4); margin-right: 4px;">`
         : "";
@@ -754,10 +710,7 @@ function openRoom(roomId, title) {
     chatLog.innerHTML = "";
     startChatLiveUpdate();
     
-    // この部屋のメンバーとして自分を登録
     registerRoomMember(roomId);
-    
-    // アナウンスのリアルタイム監視を開始
     startAnnouncementListener(roomId);
 }
 
@@ -766,10 +719,8 @@ backBtn.addEventListener('click', () => {
     if (unsubscribeChat) unsubscribeChat();
     currentRoomId = "";
     renderRoomList();
-    // ドロワーも閉じる
     document.getElementById('groupDrawer').classList.remove('active');
     
-    // アナウンスの監視解除とバーの非表示
     if (activeAnnouncementUnsubscribe) {
         activeAnnouncementUnsubscribe();
         activeAnnouncementUnsubscribe = null;
@@ -780,7 +731,6 @@ backBtn.addEventListener('click', () => {
     }
 });
 
-// アナウンス情報の監視開始
 function startAnnouncementListener(roomId) {
     if (activeAnnouncementUnsubscribe) activeAnnouncementUnsubscribe();
     
@@ -796,9 +746,8 @@ function startAnnouncementListener(roomId) {
             announcementText.textContent = data.text;
             announcementBar.classList.add('active');
             
-            // アナウンスバーをクリックしたときの挙動
             announcementBar.onclick = (e) => {
-                if (e.target.id === 'closeAnnounceBtn') return; // 閉じるボタンは除く
+                if (e.target.id === 'closeAnnounceBtn') return; 
                 
                 const targetElement = document.getElementById(`msg_${data.messageId}`);
                 if (targetElement) {
@@ -807,7 +756,7 @@ function startAnnouncementListener(roomId) {
                     if (bubble) {
                         bubble.style.transition = "background-color 0.3s ease";
                         const originalBg = bubble.style.backgroundColor;
-                        bubble.style.backgroundColor = "#fef08a"; // 黄色のハイライト
+                        bubble.style.backgroundColor = "#fef08a"; 
                         setTimeout(() => {
                             bubble.style.backgroundColor = originalBg;
                         }, 1500);
@@ -822,11 +771,10 @@ function startAnnouncementListener(roomId) {
     });
 }
 
-// アナウンス解除（閉じるボタン）の挙動
 const closeAnnounceBtn = document.getElementById('closeAnnounceBtn');
 if (closeAnnounceBtn) {
     closeAnnounceBtn.addEventListener('click', async (e) => {
-        e.stopPropagation(); // 親要素（バー全体のクリック）への伝播を防止
+        e.stopPropagation(); 
         if (!currentRoomId) return;
         try {
             const announcementRef = doc(db, "rooms", currentRoomId, "announcements", "active");
@@ -841,7 +789,6 @@ if (closeAnnounceBtn) {
 function openMessageActionModal(messageId, userId, userName, messageText, elementId) {
     selectedMessageForAction = { id: messageId, userId, userName, messageText, elementId };
     
-    // 自分が送信したメッセージの場合のみ送信取り消しを表示
     if (userId === currentUserId) {
         actionUnsendBtn.style.display = "block";
     } else {
@@ -860,7 +807,6 @@ if (actionCloseBtn) {
     actionCloseBtn.addEventListener('click', closeMessageActionModal);
 }
 
-// メッセージ操作モーダルのアクション：送信取り消し
 if (actionUnsendBtn) {
     actionUnsendBtn.addEventListener('click', async () => {
         if (!selectedMessageForAction) return;
@@ -878,7 +824,6 @@ if (actionUnsendBtn) {
     });
 }
 
-// メッセージ操作モーダルのアクション：アナウンス設定
 if (actionAnnounceBtn) {
     actionAnnounceBtn.addEventListener('click', async () => {
         if (!selectedMessageForAction || !currentRoomId) return;
@@ -901,7 +846,6 @@ if (actionAnnounceBtn) {
     });
 }
 
-// メッセージ操作モーダルのアクション：リプライ設定
 if (actionReplyBtn) {
     actionReplyBtn.addEventListener('click', () => {
         if (!selectedMessageForAction) return;
@@ -924,7 +868,6 @@ if (actionReplyBtn) {
     });
 }
 
-// リプライキャンセルの挙動
 if (cancelReplyBtn) {
     cancelReplyBtn.addEventListener('click', () => {
         replyToMessage = null;
@@ -933,7 +876,6 @@ if (cancelReplyBtn) {
         }
     });
 }
-
 
 function openPrivateChat(targetUserId, targetUserName) {
     if (targetUserId === currentUserId) return;
@@ -944,7 +886,6 @@ function openPrivateChat(targetUserId, targetUserName) {
     openRoom(privateRoomId, privateTitle);
 }
 
-// 部屋のメンバー一覧に自分を登録する
 async function registerRoomMember(roomId) {
     if (!currentUserId || !currentUserName) return;
     try {
@@ -960,7 +901,6 @@ async function registerRoomMember(roomId) {
     }
 }
 
-// グループ設定（ドロワー）を開く処理
 let unsubscribeDrawer = null;
 function openGroupDrawer() {
     const drawer = document.getElementById('groupDrawer');
@@ -973,7 +913,6 @@ function openGroupDrawer() {
     
     if (unsubscribeDrawer) unsubscribeDrawer();
     
-    // リアルタイムでその部屋のメンバー一覧を監視して描画
     const membersRef = collection(db, "rooms", currentRoomId, "members");
     unsubscribeDrawer = onSnapshot(membersRef, (snapshot) => {
         memberListEl.innerHTML = "";
@@ -997,7 +936,6 @@ function openGroupDrawer() {
     });
 }
 
-// ドロワーのイベント設定
 menuBtn.addEventListener('click', openGroupDrawer);
 
 document.getElementById('closeDrawerBtn').addEventListener('click', () => {
@@ -1018,31 +956,44 @@ document.getElementById('drawerRoomNameSaveBtn').addEventListener('click', () =>
 
 function getSavedRoomName(roomId) { return localStorage.getItem(`room_name_${roomId}`); }
 
-// 5. グローバルメッセージ監視
+// 5. 【修正済】グローバルメッセージ監視（個人チャットの通知バグ対策完了）
 function startGlobalListener() {
     const qAll = query(collection(db, "messages"), orderBy("timestamp", "desc"));
     onSnapshot(qAll, (snapshot) => {
         let newMessagesToNotify = [];
         
-        // 新着メッセージ（added）を検知して通知対象に
         snapshot.docChanges().forEach((change) => {
             if (change.type === "added") {
                 const msg = { id: change.doc.id, ...change.doc.data() };
                 if (!isInitialLoad) {
-                    // 送信者が自分以外、かつ現在開いているトーク部屋以外のメッセージのみ通知
                     if (msg.userId !== currentUserId && msg.roomId !== currentRoomId) {
-                        newMessagesToNotify.push(msg);
+                        
+                        let isForMe = false;
+
+                        if (msg.roomId === "global_group") {
+                            isForMe = true;
+                        } else if (msg.roomId.startsWith("custom_")) {
+                            if (roomsCache[msg.roomId]) {
+                                isForMe = true;
+                            }
+                        } else if (msg.roomId.startsWith("private_")) {
+                            if (currentUserId && msg.roomId.includes(currentUserId)) {
+                                isForMe = true;
+                            }
+                        }
+
+                        if (isForMe) {
+                            newMessagesToNotify.push(msg);
+                        }
                     }
                 }
             }
         });
         
-        // 初回ロード完了フラグを設定
         if (isInitialLoad && snapshot.size > 0) {
             isInitialLoad = false;
         }
         
-        // 新着通知の実行（最新の1件）
         if (newMessagesToNotify.length > 0) {
             newMessagesToNotify.sort((a, b) => {
                 const timeA = a.timestamp ? a.timestamp.toDate().getTime() : 0;
@@ -1055,11 +1006,10 @@ function startGlobalListener() {
         allMessages = [];
         snapshot.forEach(doc => { allMessages.push({ id: doc.id, ...doc.data() }); });
         renderRoomList(); 
-        updateTabBadges(); // タブバッジのリアルタイム更新
+        updateTabBadges(); 
     });
 }
 
-// インアプリ通知バナーの描画 ＆ OS標準通知の実行
 function showInAppNotification(msg) {
     const banner = document.getElementById('notificationBanner');
     const notiIcon = document.getElementById('notiIcon');
@@ -1069,7 +1019,6 @@ function showInAppNotification(msg) {
     const senderName = msg.userName || "誰か";
     const shortName = senderName.substring(0, 2);
     
-    // アイコン画像があれば表示、なければ文字
     if (msg.userIconUrl) {
         notiIcon.innerHTML = `<img src="${msg.userIconUrl}" alt="アバター">`;
     } else {
@@ -1077,7 +1026,6 @@ function showInAppNotification(msg) {
         notiIcon.style.background = "linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)";
     }
     
-    // タイトルの調整
     let titleText = senderName;
     if (msg.roomId === "global_group") {
         titleText = `全体チャット - ${senderName}`;
@@ -1093,19 +1041,15 @@ function showInAppNotification(msg) {
     notiTitle.textContent = titleText;
     notiText.textContent = messageContent;
     
-    // ----------------------------------------------------------------------
-    // 🌟 OS標準通知（端末のネイティブ通知）の送信
-    // ----------------------------------------------------------------------
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         try {
             const systemNoti = new Notification(titleText, {
                 body: messageContent,
-                icon: msg.userIconUrl || 'https://www.gstatic.com/images/branding/product/2x/avatar_square_blue_120dp.png', // アイコンがない場合のデフォルト
-                tag: msg.roomId, // 同じ部屋の通知はスタックさせる
-                renotify: true   // 新しいメッセージの到着を音や振動で通知
+                icon: msg.userIconUrl || 'https://www.gstatic.com/images/branding/product/2x/avatar_square_blue_120dp.png', 
+                tag: msg.roomId, 
+                renotify: true   
             });
             
-            // 通知をクリックした際にアプリウィンドウを前面に出し、そのトークルームを開く
             systemNoti.onclick = () => {
                 window.focus();
                 let roomTitle = "トーク";
@@ -1125,7 +1069,6 @@ function showInAppNotification(msg) {
         }
     }
     
-    // クリックされたらそのトークルームを開く（インアプリバナー用）
     const newBanner = banner.cloneNode(true);
     banner.parentNode.replaceChild(newBanner, banner);
     
@@ -1157,7 +1100,6 @@ function showInAppNotification(msg) {
     }, 4000);
 }
 
-// 下部タブバーの赤い未読数バッジの更新
 function updateTabBadges() {
     let totalUnread = 0;
     const roomsUnread = {};
@@ -1213,7 +1155,6 @@ function renderRoomList() {
     roomList.innerHTML = "";
     const roomsData = {};
     
-    // 全体チャットの初期化
     const globalDetails = getRoomDetails("global_group");
     roomsData["global_group"] = { 
         name: globalDetails.name, 
@@ -1254,7 +1195,6 @@ function renderRoomList() {
             if (!roomsData[rId]) { 
                 roomsData[rId] = { name: roomName, iconUrl: roomIcon, lastMsg: "", unread: 0, timestamp: 0 }; 
             } else {
-                // キャッシュ情報があれば上書きして常に最新に
                 roomsData[rId].name = roomName;
                 roomsData[rId].iconUrl = roomIcon;
             }
@@ -1293,7 +1233,6 @@ function renderRoomList() {
     });
 }
 
-// 6. トークルーム内のリアルタイム同期
 function startChatLiveUpdate() {
     const q = query(collection(db, "messages"), where("roomId", "==", currentRoomId), orderBy("timestamp", "asc"));
     unsubscribeChat = onSnapshot(q, (snapshot) => {
@@ -1306,7 +1245,6 @@ function startChatLiveUpdate() {
             const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
             const isMe = data.userId === currentUserId;
 
-            // 送信取り消しされたメッセージの特別処理
             if (data.type === "unsent") {
                 let systemMsgHtml = document.createElement('div');
                 systemMsgHtml.className = "message unsent";
@@ -1318,27 +1256,22 @@ function startChatLiveUpdate() {
                 return;
             }
 
-            // 無効なユーザーID（nullやundefinedなど）を除外してユニークな既読ユーザーを計算
             const uniqueReadUsers = data.readUsers
                 ? [...new Set(data.readUsers.filter(uid => uid && uid !== "null" && uid !== "undefined"))]
                 : [];
 
-            // ログイン済みかつ有効な自分のUIDがあり、自分が送信者ではない場合、かつ未読の場合は既読にする
             if (currentUserId && currentUserId !== "null" && currentUserId !== "undefined" && !isMe && !uniqueReadUsers.includes(currentUserId)) {
                 const docRef = doc(db, "messages", snapshotDoc.id);
                 updateDoc(docRef, { readUsers: arrayUnion(currentUserId) });
-                // ローカルの計算用配列にも追加して、Firestoreからのリアルタイム反映を待たずに即時表示を正しくする
                 if (!uniqueReadUsers.includes(currentUserId)) {
                     uniqueReadUsers.push(currentUserId);
                 }
             }
 
-            // 既読数の計算（送信者自身が含まれている場合は-1する）
             const hasSender = uniqueReadUsers.includes(data.userId);
             const readCount = hasSender ? uniqueReadUsers.length - 1 : uniqueReadUsers.length;
             const readText = readCount > 0 ? (currentRoomId.startsWith("private_") ? "既読" : `既読 ${readCount}`) : "";
 
-            // リプライ引用枠の構築
             let replyQuoteHtml = "";
             if (data.replyTo) {
                 replyQuoteHtml = `<div class="reply-quote-box" data-target-id="${data.replyTo.id}"><div style="font-weight: bold; font-size: 0.75rem; margin-bottom: 2px;">${data.replyTo.userName}</div><div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">${data.replyTo.messageText}</div></div>`;
@@ -1385,7 +1318,6 @@ function startChatLiveUpdate() {
             }
             chatLog.appendChild(messageHtml);
 
-            // 吹き出しをクリックしたときに操作メニューを開く
             let bubbleEl = messageHtml.querySelector('.bubble');
             if (bubbleEl) {
                 bubbleEl.style.cursor = "pointer";
@@ -1394,11 +1326,10 @@ function startChatLiveUpdate() {
                 });
             }
 
-            // 引用リプライ部分をクリックしたときに元のメッセージへスクロールする
             let replyQuoteEl = messageHtml.querySelector('.reply-quote-box');
             if (replyQuoteEl) {
                 replyQuoteEl.addEventListener('click', (e) => {
-                    e.stopPropagation(); // 吹き出し自体のクリックイベント（操作メニュー）が発火しないようにする
+                    e.stopPropagation(); 
                     const targetId = replyQuoteEl.getAttribute('data-target-id');
                     const targetElement = document.getElementById(`msg_${targetId}`);
                     if (targetElement) {
@@ -1407,7 +1338,7 @@ function startChatLiveUpdate() {
                         if (targetBubble) {
                             targetBubble.style.transition = "background-color 0.3s ease";
                             const originalBg = targetBubble.style.backgroundColor;
-                            targetBubble.style.backgroundColor = "#fef08a"; // 薄い黄色のハイライト
+                            targetBubble.style.backgroundColor = "#fef08a"; 
                             setTimeout(() => {
                                 targetBubble.style.backgroundColor = originalBg;
                             }, 1500);
@@ -1421,4 +1352,3 @@ function startChatLiveUpdate() {
         chatLog.scrollTop = chatLog.scrollHeight;
     });
 }
-
