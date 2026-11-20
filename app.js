@@ -5,7 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-const VAPID_PUBLIC_KEY = 'REPLACE_WITH_VAPID_KEY';
+const VAPID_PUBLIC_KEY = 'BFiu-rhmiSJGGCIYkdvZt_FWwOc_hhda7A4ejxIuRSsNW-mRtVbjHsyLZqDcCRDc7XK9xvAxhv8JKr70fuAKrcY';
 const vapidKey = VAPID_PUBLIC_KEY.trim();
 const pushConfigured = Boolean(vapidKey && vapidKey !== 'REPLACE_WITH_VAPID_KEY');
 const firebaseConfig = {
