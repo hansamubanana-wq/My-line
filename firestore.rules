@@ -1,0 +1,156 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function joined() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/joins/$(request.auth.uid));
+    }
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function hasExactKeys(data, keys) {
+      return data.keys().hasAll(keys) && data.keys().hasOnly(keys);
+    }
+
+    function validName(name, maximum) {
+      return name is string && name.size() <= maximum && name.matches('.*[^[:space:]　].*');
+    }
+
+    function isJpeg(url) {
+      return url.size() > 23 && url[0:23] == 'data:image/jpeg;base64,';
+    }
+
+    function validIcon(url) {
+      return url is string && url.size() <= 100000 && (url == '' || isJpeg(url));
+    }
+
+    function validProfile(data) {
+      return hasExactKeys(data, ['name', 'status', 'iconUrl', 'createdAt']) &&
+        validName(data.name, 20) && data.status is string && data.status.size() <= 120 &&
+        validIcon(data.iconUrl) && data.createdAt is timestamp;
+    }
+
+    function memberPath(uid) {
+      return /databases/$(database)/documents/members/$(uid);
+    }
+
+    function roomMember(roomId) {
+      return joined() &&
+        request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.members;
+    }
+
+    function messagePath(roomId, messageId) {
+      return /databases/$(database)/documents/rooms/$(roomId)/messages/$(messageId);
+    }
+
+    function validMessageId(messageId) {
+      return messageId is string && messageId.matches('[A-Za-z0-9]{20}');
+    }
+
+    match /joins/{uid} {
+      allow create: if isOwner(uid) && request.auth.token.firebase.sign_in_provider == 'anonymous' &&
+        hasExactKeys(request.resource.data, ['code']) && request.resource.data.code is string &&
+        request.resource.data.code.size() > 0 && request.resource.data.code.size() <= 256 &&
+        hashing.sha256(request.resource.data.code).toHexString().lower() in ['REPLACE_WITH_SHA256_HEX'];
+    }
+
+    match /members/{uid} {
+      allow read: if joined();
+      allow create: if joined() && isOwner(uid) && validProfile(request.resource.data) &&
+        request.resource.data.createdAt == request.time;
+      allow update: if joined() && isOwner(uid) && validProfile(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(uid);
+    }
+
+    match /rooms/{roomId} {
+      function validDirectRoom(data) {
+        return hasExactKeys(data, ['kind', 'members']) && data.members.size() == 2 &&
+          data.members[0] < data.members[1] && roomId == data.members.join('_') &&
+          exists(memberPath(data.members[0])) && exists(memberPath(data.members[1]));
+      }
+
+      function validGroupRoom(data) {
+        return hasExactKeys(data, ['kind', 'members', 'name', 'iconUrl', 'createdBy', 'createdAt']) &&
+          roomId.matches('group_[A-Za-z0-9]{20}') && validName(data.name, 40) && validIcon(data.iconUrl) &&
+          data.createdBy == request.auth.uid && data.createdAt == request.time &&
+          exists(memberPath(request.auth.uid));
+      }
+
+      function validRoom(data) {
+        return data.members is list && data.members.size() >= 2 && data.members.size() <= 50 &&
+          data.members.toSet().size() == data.members.size() &&
+          data.members.join(',').matches('[A-Za-z0-9]{1,128}(,[A-Za-z0-9]{1,128})+') &&
+          request.auth.uid in data.members &&
+          ((data.kind == 'direct' && validDirectRoom(data)) || (data.kind == 'group' && validGroupRoom(data)));
+      }
+
+      allow read: if joined() && request.auth.uid in resource.data.members;
+      allow create: if joined() && validRoom(request.resource.data);
+      // 同じ個人トークを両者が同時に開いても、同一内容の書き込みは成功する。
+      allow update: if joined() && request.auth.uid in resource.data.members &&
+        resource.data.kind == 'direct' && request.resource.data == resource.data;
+
+      match /messages/{messageId} {
+        function validSender(data) {
+          let profile = get(memberPath(request.auth.uid)).data;
+          return data.senderId == request.auth.uid &&
+            data.senderName == profile.name && data.senderIconUrl == profile.iconUrl;
+        }
+
+        function validImage(url) {
+          return (url.size() <= 2048 && url.matches('https://i[.]imgur[.]com/[A-Za-z0-9._/-]+')) ||
+            (url.size() <= 800000 && isJpeg(url));
+        }
+
+        function validContent(data) {
+          return data.text is string && data.imageUrl is string &&
+            ((data.type == 'text' && data.text.size() > 0 && data.text.size() <= 2000 && data.imageUrl == '') ||
+             (data.type == 'sticker' && data.text in ['🐱', '🐶', '🐰', '🦊', '🐻', '🐼', '🐨', '🦁',
+                '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦'] && data.imageUrl == '') ||
+             (data.type == 'image' && data.text == '' && validImage(data.imageUrl)));
+        }
+
+        function validMessage(data) {
+          return hasExactKeys(data, ['senderId', 'senderName', 'senderIconUrl', 'type', 'text', 'imageUrl',
+              'replyTo', 'timestamp', 'readUsers']) && validSender(data) && validContent(data) &&
+            data.timestamp == request.time && data.readUsers == [request.auth.uid] &&
+            (data.replyTo == '' || (validMessageId(data.replyTo) && exists(messagePath(roomId, data.replyTo))));
+        }
+
+        function addsOwnReceipt() {
+          let previous = resource.data.readUsers;
+          let next = request.resource.data.readUsers;
+          return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readUsers']) &&
+            ((request.auth.uid in previous && next == previous) ||
+             (!(request.auth.uid in previous) && next == previous.concat([request.auth.uid])));
+        }
+
+        function unsendsOwnMessage() {
+          let data = request.resource.data;
+          return resource.data.senderId == request.auth.uid &&
+            data.diff(resource.data).affectedKeys().hasOnly(['type', 'text', 'imageUrl', 'replyTo']) &&
+            data.type == 'unsent' && data.text == '' && data.imageUrl == '' && data.replyTo == '';
+        }
+
+        allow read: if roomMember(roomId);
+        allow create: if roomMember(roomId) && validMessageId(messageId) && validMessage(request.resource.data);
+        allow update: if roomMember(roomId) && (addsOwnReceipt() || unsendsOwnMessage());
+      }
+
+      match /announcements/active {
+        function validAnnouncement(data) {
+          return hasExactKeys(data, ['messageId', 'pinnedBy', 'pinnedAt']) &&
+            data.pinnedBy == request.auth.uid && data.pinnedAt == request.time &&
+            validMessageId(data.messageId) && get(messagePath(roomId, data.messageId)).data.type != 'unsent';
+        }
+
+        allow get, delete: if roomMember(roomId);
+        allow create, update: if roomMember(roomId) && validAnnouncement(request.resource.data);
+      }
+    }
+  }
+}

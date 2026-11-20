@@ -3,13 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>chat</title>
-    <meta name="description" content="シンプルでプレミアムな、リアルタイム同期型グループ＆個人チャットアプリ">
+    <title>my-line</title>
+    <meta name="description" content="my-line">
+    <meta property="og:title" content="my-line">
+    <meta property="og:description" content="my-line">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://my-line-rho.vercel.app/icon.png">
     <meta name="theme-color" content="#273246">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon.png">
     <link rel="icon" type="image/png" href="icon.png">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='38' fill='%23273246'/%3E%3Cpath fill='%23a1c4fd' d='M48 50h96a12 12 0 0 1 12 12v53a12 12 0 0 1-12 12H82l-26 19v-19h-8a12 12 0 0 1-12-12V62a12 12 0 0 1 12-12Z'/%3E%3C/svg%3E">
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -18,31 +23,31 @@
 <div class="chat-container">
     
     <div id="authScreen" class="screen active">
-        <div class="auth-box">
-            <h2 id="authTitle">ログイン</h2>
-            <input type="text" id="authName" class="auth-input" placeholder="あなたの名前（新規登録時のみ必須）">
-            <input type="email" id="authEmail" class="auth-input" placeholder="メールアドレス">
-            <input type="password" id="authPassword" class="auth-input" placeholder="パスワード（6文字以上）">
-            <button id="authBtn" class="auth-btn">ログインする</button>
-            <div class="auth-divider">または</div>
-            <button id="googleAuthBtn" class="google-btn">
-                <svg class="google-icon" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                </svg>
-                <span>Googleでログイン</span>
-            </button>
-            <div id="authToggle" class="auth-toggle">アカウントを持っていない場合は新規登録</div>
-        </div>
+        <form id="authForm" class="auth-box" autocomplete="off">
+            <h2>my-line</h2>
+            <label class="auth-label" for="authSchool">通っている学校の名前（漢字）</label>
+            <input type="text" id="authSchool" class="auth-input" autocomplete="off" maxlength="40" required>
+            <fieldset id="authColors" class="auth-colors">
+                <legend class="auth-label">教室のカーテンの色（当てはまるものをすべて）</legend>
+                <label class="color-card" style="background:#ffffff"><input type="checkbox" value="白" aria-label="白"></label>
+                <label class="color-card" style="background:#3f9a4c"><input type="checkbox" value="緑" aria-label="緑"></label>
+                <label class="color-card" style="background:#8fd3f4"><input type="checkbox" value="水色" aria-label="水色"></label>
+                <label class="color-card" style="background:#fbf1b4"><input type="checkbox" value="淡い黄色" aria-label="淡い黄色"></label>
+                <label class="color-card" style="background:#e6d5b8"><input type="checkbox" value="ベージュ" aria-label="ベージュ"></label>
+                <label class="color-card" style="background:#1f2f5c"><input type="checkbox" value="紺" aria-label="紺"></label>
+                <label class="color-card" style="background:#f5cf00"><input type="checkbox" value="黄色" aria-label="黄色"></label>
+                <label class="color-card" style="background:#f5b3c6"><input type="checkbox" value="ピンク" aria-label="ピンク"></label>
+            </fieldset>
+            <input type="text" id="authName" class="auth-input" aria-label="名前（必須）" placeholder="名前（必須）" maxlength="20" required>
+            <button type="submit" id="authBtn" class="auth-btn" disabled>参加する</button>
+            <p id="authError" class="auth-error" role="alert"></p>
+        </form>
     </div>
 
-    <div id="memberScreen" class="screen">
+    <div id="memberScreen" class="screen" inert>
         <div class="header">
             <div class="header-top">
                 <div class="title" id="memberMainTitle">友だち</div>
-                <button class="logout-btn" id="logoutBtn1">ログアウト</button>
             </div>
         </div>
         <div class="list-content" style="display:flex; flex-direction:column; overflow:hidden;">
@@ -50,30 +55,28 @@
             <div id="memberList" style="flex:1; overflow-y:auto;"></div>
         </div>
         <div class="tab-bar">
-            <div class="tab-item active" id="tabMember">友だち</div>
-            <div class="tab-item" id="tabTalk">トーク</div>
+            <button type="button" class="tab-item active" id="tabMember">友だち</button>
+            <button type="button" class="tab-item" id="tabTalk">トーク</button>
         </div>
     </div>
 
-    <div id="listScreen" class="screen">
+    <div id="listScreen" class="screen" inert>
         <div class="header">
             <div class="header-top">
                 <div class="title">トーク</div>
-                <button class="logout-btn" id="logoutBtn2">ログアウト</button>
             </div>
         </div>
         <div class="create-room-box">
-            <input type="text" id="roomInput" class="room-create-input" placeholder="合言葉でグループに参加、または新規作成">
-            <button id="saveRoomBtn" class="room-create-btn">参加・作成</button>
+            <button id="saveRoomBtn" class="room-create-btn">グループ作成</button>
         </div>
         <div class="list-content" id="roomList"></div>
         <div class="tab-bar">
-            <div class="tab-item" id="tabMember2">友だち</div>
-            <div class="tab-item active" id="tabTalk2">トーク</div>
+            <button type="button" class="tab-item" id="tabMember2">友だち</button>
+            <button type="button" class="tab-item active" id="tabTalk2">トーク</button>
         </div>
     </div>
 
-    <div id="roomScreen" class="screen">
+    <div id="roomScreen" class="screen" inert>
         <div class="header">
             <div class="header-top">
                 <button id="backBtn" class="back-btn">◀ 戻る</button>
@@ -97,7 +100,7 @@
             <label for="imageInput" class="image-send-label">📎</label>
             <input type="file" id="imageInput" accept="image/*">
             <button id="stickerBtn" class="sticker-toggle-btn">😊</button>
-            <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力">
+            <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力" aria-label="メッセージ" maxlength="2000">
             <button id="sendBtn" class="send-btn">送信</button>
         </div>
         <!-- スタンプ選択パネル -->
@@ -115,11 +118,11 @@
             </div>
             <div class="modal-input-group">
                 <label for="profileModalName">お名前 (必須)</label>
-                <input type="text" id="profileModalName" placeholder="お名前を入力してください">
+                <input type="text" id="profileModalName" placeholder="お名前を入力してください" maxlength="20" required>
             </div>
             <div class="modal-input-group">
                 <label for="profileModalStatus">ステータスメッセージ (一言)</label>
-                <input type="text" id="profileModalStatus" placeholder="今日の気分や予定など">
+                <input type="text" id="profileModalStatus" placeholder="今日の気分や予定など" maxlength="120">
             </div>
             <div class="modal-btn-group">
                 <button id="profileSaveBtn" class="modal-btn save">保存</button>
@@ -139,8 +142,12 @@
             </div>
             <div class="modal-input-group">
                 <label for="createRoomModalName">グループ名 (必須)</label>
-                <input type="text" id="createRoomModalName" placeholder="グループ名を入力してください">
+                <input type="text" id="createRoomModalName" placeholder="グループ名を入力してください" maxlength="40" required>
             </div>
+            <fieldset class="group-members">
+                <legend>メンバー</legend>
+                <div id="createRoomMembers"></div>
+            </fieldset>
             <div class="modal-btn-group">
                 <button id="createRoomModalBtn" class="modal-btn save">作成</button>
                 <button id="createRoomCloseBtn" class="modal-btn cancel">キャンセル</button>
@@ -159,7 +166,7 @@
                 <div class="drawer-section">
                     <label>トークルーム名</label>
                     <div class="room-name-edit-box">
-                        <input type="text" id="drawerRoomNameInput">
+                        <input type="text" id="drawerRoomNameInput" maxlength="40">
                         <button id="drawerRoomNameSaveBtn">変更</button>
                     </div>
                 </div>

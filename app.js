@@ -1,6 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion, where, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import {
+    getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp,
+    doc, updateDoc, arrayUnion, where, setDoc, getDocFromServer, deleteDoc, runTransaction
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCbFEZH9VywEFumJRbbqPftEJAZJDb8hQ0",
@@ -15,1340 +18,832 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
+const byId = id => document.getElementById(id);
+const screens = { auth: byId('authScreen'), member: byId('memberScreen'), list: byId('listScreen'), room: byId('roomScreen') };
+const authSchool = byId('authSchool');
+const authColors = byId('authColors');
+const authName = byId('authName');
+const authBtn = byId('authBtn');
+const authError = byId('authError');
+const memberList = byId('memberList');
+const roomList = byId('roomList');
+const chatLog = byId('chatLog');
+const chatInput = byId('chatInput');
+const sendBtn = byId('sendBtn');
+const imageInput = byId('imageInput');
+const chatTitle = byId('chatTitle');
+const stickerPicker = byId('stickerPicker');
+const replyPreviewBox = byId('replyPreviewBox');
+const announcementBar = byId('announcementBar');
+const messageActionModal = byId('messageActionModal');
+const actionUnsendBtn = byId('actionUnsendBtn');
+const groupDrawer = byId('groupDrawer');
+
+let joining = false;
 let currentUserId = null;
-let currentUserName = "";
-let currentUserIconUrl = "";
-let currentUserStatus = ""; // ステータスメッセージ (一言)
-let currentRoomId = "global_group"; 
-let isSignUpMode = false; // ログインか新規登録かの切り替えフラグ
+let currentRoomId = null;
+let members = new Map();
+let rooms = new Map();
+const roomFeeds = new Map();
+let unsubscribeMembers;
+let unsubscribeRooms;
+let unsubscribeAnnouncement;
+let announcementId;
+let replyToMessage;
+let selectedMessage;
+let bannerTimeout;
 
-let unsubscribeChat = null;
-let allMessages = []; 
+function element(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+}
 
-// プレミアム機能用変数
-let replyToMessage = null; // { id, userName, messageText }
-let activeAnnouncementUnsubscribe = null;
-let selectedMessageForAction = null; // { id, userId, userName, messageText, elementId }
+function appendImage(container, url, alt) {
+    const image = element('img');
+    image.src = url;
+    image.alt = alt;
+    container.appendChild(image);
+    return image;
+}
 
-// キャッシュオブジェクト（リアルタイム同期用）
-let roomsCache = {}; // { roomId: { name, iconUrl } }
-let usersCache = {}; // { uid: { name, iconUrl } }
+function setAvatar(container, name, url) {
+    container.textContent = url ? '' : Array.from(name).slice(0, 2).join('');
+    if (url) appendImage(container, url, 'アバター');
+}
 
-// 通知用変数
-let isInitialLoad = true;
-let bannerTimeout = null;
+function listItem(name, iconUrl, detail, onClick) {
+    const item = element('button', 'list-item');
+    item.type = 'button';
+    const icon = element('span', 'item-icon');
+    setAvatar(icon, name, iconUrl);
+    const info = element('span', 'item-info');
+    info.append(element('span', 'item-name', name));
+    if (detail) info.append(element('span', 'item-sub', detail));
+    item.append(icon, info);
+    item.addEventListener('click', onClick);
+    return item;
+}
 
-// 画像の圧縮とBase64変換のユーティリティ関数
-function compressAndConvertToBase64(file, maxWidth = 800, maxHeight = 800, quality = 0.7) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
-
-                if (width > height) {
-                    if (width > maxWidth) {
-                        height = Math.round((height * maxWidth) / width);
-                        width = maxWidth;
-                    }
-                } else {
-                    if (height > maxHeight) {
-                        width = Math.round((width * maxHeight) / height);
-                        height = maxHeight;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-
-                const dataUrl = canvas.toDataURL('image/jpeg', quality);
-                resolve(dataUrl);
-            };
-            img.src = e.target.result;
-        };
-        reader.onerror = (err) => reject(err);
-        reader.readAsDataURL(file);
-    });
-} 
-
-// 各種画面要素
-const screens = {
-    auth: document.getElementById('authScreen'),
-    member: document.getElementById('memberScreen'),
-    list: document.getElementById('listScreen'),
-    room: document.getElementById('roomScreen')
-};
-
-const authTitle = document.getElementById('authTitle');
-const authName = document.getElementById('authName');
-const authEmail = document.getElementById('authEmail');
-const authPassword = document.getElementById('authPassword');
-const authBtn = document.getElementById('authBtn');
-const authToggle = document.getElementById('authToggle');
-
-const memberList = document.getElementById('memberList');
-const roomList = document.getElementById('roomList');
-const chatLog = document.getElementById('chatLog');
-const chatInput = document.getElementById('chatInput');
-const sendBtn = document.getElementById('sendBtn');
-const roomInput = document.getElementById('roomInput');
-const saveRoomBtn = document.getElementById('saveRoomBtn');
-const imageInput = document.getElementById('imageInput');
-const chatTitle = document.getElementById('chatTitle');
-const backBtn = document.getElementById('backBtn');
-const menuBtn = document.getElementById('menuBtn');
-const memberMainTitle = document.getElementById('memberMainTitle');
-const googleAuthBtn = document.getElementById('googleAuthBtn');
-
-const stickerBtn = document.getElementById('stickerBtn');
-const stickerPicker = document.getElementById('stickerPicker');
-const replyPreviewBox = document.getElementById('replyPreviewBox');
-const replyPreviewText = document.getElementById('replyPreviewText');
-const cancelReplyBtn = document.getElementById('cancelReplyBtn');
-
-const messageActionModal = document.getElementById('messageActionModal');
-const actionReplyBtn = document.getElementById('actionReplyBtn');
-const actionAnnounceBtn = document.getElementById('actionAnnounceBtn');
-const actionUnsendBtn = document.getElementById('actionUnsendBtn');
-const actionCloseBtn = document.getElementById('actionCloseBtn');
-
-const STICKERS = ["🐱", "🐶", "🐰", "🦊", "🐻", "🐼", "🐨", "🐱", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦"];
-
-// スタンプ選択パネルの初期化
-STICKERS.forEach(sticker => {
-    const btn = document.createElement('button');
-    btn.className = 'sticker-item';
-    btn.textContent = sticker;
-    btn.addEventListener('click', () => {
-        sendSticker(sticker);
-        stickerPicker.classList.remove('active');
-    });
-    stickerPicker.appendChild(btn);
-});
-
-// スタンプボタンのトグル挙動
-if (stickerBtn && stickerPicker) {
-    stickerBtn.addEventListener('click', () => {
-        stickerPicker.classList.toggle('active');
-    });
+function showScreen(key) {
+    for (const [name, screen] of Object.entries(screens)) {
+        screen.classList.toggle('active', name === key);
+        screen.inert = name !== key;
+    }
 }
 
 function setScreenSize() {
-    let vh = window.innerHeight * 0.01;
-    document.documentElement.style.setProperty('--vh', `${vh}px`);
+    document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
 }
 window.addEventListener('resize', setScreenSize);
 window.addEventListener('orientationchange', setScreenSize);
 setScreenSize();
 
-// インアプリ通知バナーの動的生成
-const chatContainer = document.querySelector('.chat-container');
-const notificationBanner = document.createElement('div');
-notificationBanner.id = 'notificationBanner';
-notificationBanner.className = 'notification-banner';
-notificationBanner.innerHTML = `
-    <div class="notification-icon" id="notiIcon">👤</div>
-    <div class="notification-info">
-        <div class="notification-title" id="notiTitle">新着メッセージ</div>
-        <div class="notification-text" id="notiText">メッセージがあります</div>
-    </div>
-    <button class="notification-close" id="notiCloseBtn">×</button>
-`;
-chatContainer.appendChild(notificationBanner);
-
-// 画面切り替え関数
-function showScreen(screenKey) {
-    Object.keys(screens).forEach(key => {
-        if(key === screenKey) screens[key].classList.add('active');
-        else screens[key].classList.remove('active');
-    });
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+    }
 }
 
-// LINE風タブバーのイベント
-document.getElementById('tabTalk').addEventListener('click', () => showScreen('list'));
-document.getElementById('tabMember2').addEventListener('click', () => showScreen('member'));
-
-// --- 認証（ログイン・新規登録）まわりの処理 ---
-authToggle.addEventListener('click', () => {
-    isSignUpMode = !isSignUpMode;
-    if(isSignUpMode) {
-        authTitle.textContent = "新規登録";
-        authName.style.display = "block";
-        authBtn.textContent = "登録して始める";
-        authToggle.textContent = "すでにアカウントをお持ちの場合はログイン";
-    } else {
-        authTitle.textContent = "ログイン";
-        authName.style.display = "none";
-        authBtn.textContent = "ログインする";
-        authToggle.textContent = "アカウントを持っていない場合は新規登録";
-    }
+byId('tabTalk').addEventListener('click', () => {
+    showScreen('list');
+    requestNotificationPermission();
 });
+byId('tabMember2').addEventListener('click', () => showScreen('member'));
 
-authBtn.addEventListener('click', async () => {
-    const email = authEmail.value.trim();
-    const password = authPassword.value;
+function enterApp(uid, profile) {
+    if (currentUserId === uid) return;
+    currentUserId = uid;
+    members.set(uid, profile);
+    renderMyProfileCard();
+    showScreen('member');
+    startMemberListListener(uid);
+    startRoomsListener(uid);
+}
+
+function leaveApp() {
+    closeRoom();
+    unsubscribeMembers?.();
+    unsubscribeRooms?.();
+    for (const feed of roomFeeds.values()) feed.unsubscribe();
+    roomFeeds.clear();
+    rooms.clear();
+    members.clear();
+    currentUserId = null;
+    profileModal.classList.remove('active');
+    createRoomModal.classList.remove('active');
+    memberList.replaceChildren();
+    renderRoomList();
+    document.querySelector('.notification-banner')?.classList.remove('active');
+    showScreen('auth');
+}
+
+byId('authForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (authBtn.disabled) return;
+
+    const school = authSchool.value.normalize('NFKC').replace(/\s/g, '');
+    const colors = [...authColors.querySelectorAll('input:checked')].map(input => input.value);
+    const code = `${school}|${colors.join(',')}`;
     const name = authName.value.trim();
-
-    if(!email || !password) { alert("メールアドレスとパスワードを入力してね！"); return; }
-
-    if(isSignUpMode) {
-        if(!name) { alert("お名前を入力してください！"); return; }
-        try {
-            const res = await createUserWithEmailAndPassword(auth, email, password);
-            await setDoc(doc(db, "users", res.user.uid), {
-                uid: res.user.uid,
-                name: name,
-                email: email
-            });
-            alert("新しくアカウントを作ったよ！");
-        } catch(err) { alert("登録エラー: " + err.message); }
-    } else {
-        try {
-            await signInWithEmailAndPassword(auth, email, password);
-        } catch(err) { alert("ログインエラー: " + err.message); }
+    authError.textContent = '';
+    if (!name) {
+        authError.textContent = '名前を入力してください';
+        authName.focus();
+        return;
     }
-});
 
-// Googleログイン処理
-googleAuthBtn.addEventListener('click', async () => {
-    const provider = new GoogleAuthProvider();
+    joining = true;
+    authBtn.disabled = true;
     try {
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-        
-        const userDocRef = doc(db, "users", user.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        if(!userDoc.exists()) {
-            await setDoc(userDocRef, {
-                uid: user.uid,
-                name: user.displayName || "Googleユーザー",
-                email: user.email
-            });
+        const user = auth.currentUser?.isAnonymous ? auth.currentUser : (await signInAnonymously(auth)).user;
+        const profileRef = doc(db, 'members', user.uid);
+        try {
+            await setDoc(doc(db, 'joins', user.uid), { code });
+        } catch (error) {
+            if (error.code !== 'permission-denied') throw error;
+            // joins は読めないため、プロフィールを読めるかで参加済みかを確認する。
+            try {
+                await getDocFromServer(profileRef);
+            } catch (profileError) {
+                if (profileError.code !== 'permission-denied') throw profileError;
+                authError.textContent = '答えが違います';
+                authSchool.focus();
+                return;
+            }
         }
-    } catch(err) {
-        alert("Googleログインエラー: " + err.message);
+
+        const profile = await runTransaction(db, async transaction => {
+            const existing = await transaction.get(profileRef);
+            if (existing.exists()) return existing.data();
+            const newProfile = { name, status: '', iconUrl: '', createdAt: serverTimestamp() };
+            transaction.set(profileRef, newProfile);
+            return newProfile;
+        });
+
+        if (auth.currentUser?.uid === user.uid) {
+            event.target.reset();
+            enterApp(user.uid, profile);
+        }
+    } catch (error) {
+        authError.textContent = error.code === 'auth/operation-not-allowed'
+            ? '匿名ログインが有効になっていません'
+            : '参加できませんでした。もう一度お試しください';
+    } finally {
+        joining = false;
+        authBtn.disabled = false;
     }
 });
 
-// ログアウト処理
-const logout = () => { signOut(auth); localStorage.clear(); location.reload(); };
-document.getElementById('logoutBtn1').addEventListener('click', logout);
-document.getElementById('logoutBtn2').addEventListener('click', logout);
+function compressImage(file, maximumSize, quality) {
+    const url = URL.createObjectURL(file);
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onerror = () => reject(new Error('画像を読み込めません'));
+        image.onload = () => {
+            try {
+                const scale = Math.min(1, maximumSize / Math.max(image.width, image.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(image.width * scale));
+                canvas.height = Math.max(1, Math.round(image.height * scale));
+                canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            } catch (error) {
+                reject(error);
+            }
+        };
+        image.src = url;
+    }).finally(() => URL.revokeObjectURL(url));
+}
 
-// --- プロフィール編集モーダルの処理 ---
-const profileModal = document.getElementById('profileModal');
-const profileModalName = document.getElementById('profileModalName');
-const profileModalIcon = document.getElementById('profileModalIcon');
-const profileIconInput = document.getElementById('profileIconInput');
-const profileSaveBtn = document.getElementById('profileSaveBtn');
-const profileCloseBtn = document.getElementById('profileCloseBtn');
-
-let tempProfileIconBase64 = "";
-const profileModalStatus = document.getElementById('profileModalStatus');
+const profileModal = byId('profileModal');
+const profileModalName = byId('profileModalName');
+const profileModalStatus = byId('profileModalStatus');
+const profileModalIcon = byId('profileModalIcon');
+const profileSaveBtn = byId('profileSaveBtn');
+let profileIconUrl = '';
 
 function openProfileModal() {
-    profileModalName.value = currentUserName || "";
-    profileModalStatus.value = currentUserStatus || "";
-    tempProfileIconBase64 = currentUserIconUrl || "";
-    
-    updateProfileModalPreview(tempProfileIconBase64);
-    
-    const isNameInvalid = !currentUserName || currentUserName === "名無しさん" || currentUserName === "Googleユーザー" || currentUserName.trim() === "";
-    if (isNameInvalid) {
-        profileCloseBtn.style.display = "none";
-    } else {
-        profileCloseBtn.style.display = "block";
-    }
-    
+    const profile = members.get(currentUserId);
+    profileModalName.value = profile.name;
+    profileModalStatus.value = profile.status;
+    profileIconUrl = profile.iconUrl;
+    setAvatar(profileModalIcon, profile.name, profileIconUrl);
     profileModal.classList.add('active');
 }
 
-function updateProfileModalPreview(url) {
-    if (url) {
-        profileModalIcon.innerHTML = `<img src="${url}" alt="アバター">`;
-    } else {
-        const shortName = currentUserName ? currentUserName.substring(0, 2) : "自分";
-        profileModalIcon.textContent = shortName;
-    }
-}
-
-profileIconInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
+byId('profileIconInput').addEventListener('change', async event => {
+    const file = event.target.files[0];
     if (!file) return;
+    profileSaveBtn.disabled = true;
     try {
-        const compressedBase64 = await compressAndConvertToBase64(file, 150, 150, 0.8);
-        tempProfileIconBase64 = compressedBase64;
-        updateProfileModalPreview(compressedBase64);
-    } catch (err) {
-        alert("画像の読み込みに失敗しました。");
+        profileIconUrl = await compressImage(file, 150, 0.8);
+        setAvatar(profileModalIcon, profileModalName.value || '自分', profileIconUrl);
+    } catch {
+        alert('画像の読み込みに失敗しました。');
+    } finally {
+        event.target.value = '';
+        profileSaveBtn.disabled = false;
     }
 });
 
 profileSaveBtn.addEventListener('click', async () => {
-    const newName = profileModalName.value.trim();
-    const newStatus = profileModalStatus.value.trim();
-    if (!newName || newName === "名無しさん" || newName === "Googleユーザー") {
-        alert("有効なお名前を入力してください！");
+    const name = profileModalName.value.trim();
+    if (!name) {
+        alert('名前を入力してください。');
+        profileModalName.focus();
         return;
     }
-    
     profileSaveBtn.disabled = true;
-    profileSaveBtn.textContent = "保存中...";
-    
     try {
-        const userDocRef = doc(db, "users", currentUserId);
-        await setDoc(userDocRef, {
-            uid: currentUserId,
-            name: newName,
-            email: auth.currentUser.email,
-            iconUrl: tempProfileIconBase64,
-            status: newStatus
-        }, { merge: true });
-        
-        currentUserName = newName;
-        currentUserIconUrl = tempProfileIconBase64;
-        currentUserStatus = newStatus;
-        
-        memberMainTitle.textContent = `友だち (${currentUserName})`;
-        renderMyProfileCard();
+        await updateDoc(doc(db, 'members', currentUserId), {
+            name, status: profileModalStatus.value.trim(), iconUrl: profileIconUrl
+        });
         profileModal.classList.remove('active');
-        
-        if (currentRoomId) {
-            registerRoomMember(currentRoomId);
-        }
-    } catch (err) {
-        alert("保存エラー: " + err.message);
-    } finally { // ✕ 「finaly」のタイポを「finally」に修正！
+    } catch {
+        alert('プロフィールを保存できませんでした。');
+    } finally {
         profileSaveBtn.disabled = false;
-        profileSaveBtn.textContent = "保存";
     }
 });
+byId('profileCloseBtn').addEventListener('click', () => profileModal.classList.remove('active'));
 
-profileCloseBtn.addEventListener('click', () => {
-    profileModal.classList.remove('active');
-});
-
-// --- グループ新規作成モーダルの処理 ---
-const createRoomModal = document.getElementById('createRoomModal');
-const createRoomModalName = document.getElementById('createRoomModalName');
-const createRoomModalIcon = document.getElementById('createRoomModalIcon');
-const createRoomIconInput = document.getElementById('createRoomIconInput');
-const createRoomModalBtn = document.getElementById('createRoomModalBtn');
-const createRoomCloseBtn = document.getElementById('createRoomCloseBtn');
-
-let tempRoomIconBase64 = "";
-let pendingRoomKeyword = ""; 
-
-function openCreateRoomModal(keyword = "") {
-    createRoomModalName.value = keyword;
-    tempRoomIconBase64 = "";
-    pendingRoomKeyword = keyword.trim();
-    createRoomModalIcon.textContent = "👥";
-    createRoomModal.classList.add('active');
+function renderMyProfileCard() {
+    const profile = members.get(currentUserId);
+    if (!profile) return;
+    byId('memberMainTitle').textContent = `友だち (${profile.name})`;
+    const card = listItem(profile.name, profile.iconUrl, profile.status && `💬 ${profile.status}`, openProfileModal);
+    card.classList.add('my-profile-card');
+    card.setAttribute('aria-label', `${profile.name}のプロフィール設定`);
+    byId('myProfileCardContainer').replaceChildren(card);
 }
 
-createRoomIconInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
+function friends() {
+    return [...members].filter(([uid]) => uid !== currentUserId)
+        .sort(([, first], [, second]) => first.name.localeCompare(second.name, 'ja'));
+}
+
+function startMemberListListener(uid) {
+    unsubscribeMembers = onSnapshot(collection(db, 'members'), snapshot => {
+        const updatedMembers = new Map(snapshot.docs.map(member => [member.id, member.data()]));
+        if (!updatedMembers.has(uid)) {
+            if (!snapshot.metadata.fromCache) leaveApp();
+            return;
+        }
+        members = updatedMembers;
+        renderMyProfileCard();
+        memberList.replaceChildren();
+        for (const [friendId, friend] of friends()) {
+            const item = listItem(friend.name, friend.iconUrl, friend.status && `💬 ${friend.status}`, async () => {
+                requestNotificationPermission();
+                item.disabled = true;
+                try {
+                    await openPrivateChat(friendId);
+                } catch {
+                    alert('トークを開けませんでした。');
+                } finally {
+                    item.disabled = false;
+                }
+            });
+            memberList.appendChild(item);
+        }
+        if (createRoomModal.classList.contains('active')) renderGroupMemberOptions();
+        renderRoomList();
+        if (currentRoomId) {
+            renderRoomTitle();
+            if (groupDrawer.classList.contains('active')) renderDrawerMembers();
+        }
+    }, error => console.error('友だち一覧の取得に失敗しました。', error));
+}
+
+const createRoomModal = byId('createRoomModal');
+const createRoomModalName = byId('createRoomModalName');
+const createRoomModalIcon = byId('createRoomModalIcon');
+const createRoomModalBtn = byId('createRoomModalBtn');
+const createRoomMembers = byId('createRoomMembers');
+let roomIconUrl = '';
+
+function renderGroupMemberOptions() {
+    const selected = new Set([...createRoomMembers.querySelectorAll('input:checked')].map(input => input.value));
+    createRoomMembers.replaceChildren();
+    for (const [uid, friend] of friends()) {
+        const option = element('label', 'group-member-option');
+        const checkbox = element('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = uid;
+        checkbox.checked = selected.has(uid);
+        option.append(checkbox, element('span', '', friend.name));
+        createRoomMembers.append(option);
+    }
+}
+
+byId('saveRoomBtn').addEventListener('click', () => {
+    createRoomModalName.value = '';
+    createRoomModalIcon.textContent = '👥';
+    roomIconUrl = '';
+    createRoomMembers.replaceChildren();
+    renderGroupMemberOptions();
+    createRoomModal.classList.add('active');
+});
+byId('createRoomCloseBtn').addEventListener('click', () => createRoomModal.classList.remove('active'));
+
+byId('createRoomIconInput').addEventListener('change', async event => {
+    const file = event.target.files[0];
     if (!file) return;
+    createRoomModalBtn.disabled = true;
     try {
-        const compressedBase64 = await compressAndConvertToBase64(file, 150, 150, 0.8);
-        tempRoomIconBase64 = compressedBase64;
-        createRoomModalIcon.innerHTML = `<img src="${compressedBase64}" alt="グループアイコン">`;
-    } catch (err) {
-        alert("画像の読み込みに失敗しました。");
+        roomIconUrl = await compressImage(file, 150, 0.8);
+        setAvatar(createRoomModalIcon, '👥', roomIconUrl);
+    } catch {
+        alert('画像の読み込みに失敗しました。');
+    } finally {
+        event.target.value = '';
+        createRoomModalBtn.disabled = false;
     }
 });
 
 createRoomModalBtn.addEventListener('click', async () => {
     const name = createRoomModalName.value.trim();
+    const selected = [...createRoomMembers.querySelectorAll('input:checked')].map(input => input.value);
     if (!name) {
-        alert("グループ名を入力してください！");
+        alert('グループ名を入力してください。');
         return;
     }
-    if (!tempRoomIconBase64) {
-        alert("グループアイコンを設定してください！");
+    if (selected.length < 1 || selected.length > 49) {
+        alert('メンバーを1〜49人選んでください。');
         return;
     }
-    
+
+    const uid = currentUserId;
+    const roomId = `group_${doc(collection(db, 'rooms')).id}`;
+    const room = {
+        kind: 'group', name, iconUrl: roomIconUrl, members: [uid, ...selected],
+        createdBy: uid, createdAt: serverTimestamp()
+    };
     createRoomModalBtn.disabled = true;
-    createRoomModalBtn.textContent = "作成中...";
-    
     try {
-        let roomId = "";
-        if (pendingRoomKeyword) {
-            roomId = "custom_" + pendingRoomKeyword;
-        } else {
-            const newRoomRef = doc(collection(db, "rooms"));
-            roomId = "custom_" + newRoomRef.id;
+        await setDoc(doc(db, 'rooms', roomId), room);
+        if (uid === currentUserId) {
+            if (!rooms.has(roomId)) rooms.set(roomId, room);
+            createRoomModal.classList.remove('active');
+            openRoom(roomId);
         }
-        
-        await setDoc(doc(db, "rooms", roomId), {
-            roomId: roomId,
-            name: name,
-            iconUrl: tempRoomIconBase64,
-            createdBy: currentUserId,
-            createdAt: serverTimestamp()
-        });
-        
-        roomsCache[roomId] = {
-            name: name,
-            iconUrl: tempRoomIconBase64
-        };
-        
-        openRoom(roomId, name);
-        createRoomModal.classList.remove('active');
-        roomInput.value = "";
-    } catch (err) {
-        alert("グループ作成エラー: " + err.message);
-    } finally { // ✕ ここも修正
+    } catch {
+        alert('グループを作成できませんでした。');
+    } finally {
         createRoomModalBtn.disabled = false;
-        createRoomModalBtn.textContent = "作成";
     }
 });
 
-createRoomCloseBtn.addEventListener('click', () => {
-    createRoomModal.classList.remove('active');
-});
-
-function renderMyProfileCard() {
-    const container = document.getElementById('myProfileCardContainer');
-    if (!container) return;
-    
-    const shortName = currentUserName ? currentUserName.substring(0, 2) : "自分";
-    const iconHtml = currentUserIconUrl 
-        ? `<img src="${currentUserIconUrl}" alt="アイコン">`
-        : shortName;
-        
-    const subText = currentUserStatus 
-        ? `💬 ${currentUserStatus}` 
-        : "タップしてプロフィール設定";
-        
-    container.innerHTML = `
-        <div class="my-profile-card" id="myProfileCardBtn">
-            <div class="item-icon">${iconHtml}</div>
-            <div class="item-info">
-                <div class="item-name">${currentUserName || "名前を設定してください"}</div>
-                <div class="item-sub">${subText}</div>
-            </div>
-        </div>
-    `;
-    
-    document.getElementById('myProfileCardBtn').addEventListener('click', () => {
-        openProfileModal();
-    });
+async function openPrivateChat(friendId) {
+    const uid = currentUserId;
+    const participantIds = [uid, friendId].sort();
+    const roomId = participantIds.join('_');
+    if (!rooms.has(roomId)) {
+        const room = { kind: 'direct', members: participantIds };
+        await setDoc(doc(db, 'rooms', roomId), room);
+        if (uid !== currentUserId) return;
+        if (!rooms.has(roomId)) rooms.set(roomId, room);
+    }
+    if (screens.member.classList.contains('active')) openRoom(roomId);
 }
 
-let roomsListenerUnsubscribe = null;
-function startRoomsListener() {
-    if (roomsListenerUnsubscribe) roomsListenerUnsubscribe();
-    
-    roomsListenerUnsubscribe = onSnapshot(collection(db, "rooms"), (snapshot) => {
-        snapshot.forEach((roomDoc) => {
-            const rData = roomDoc.data();
-            roomsCache[roomDoc.id] = {
-                name: rData.name,
-                iconUrl: rData.iconUrl
-            };
-        });
-        renderRoomList(); 
-    });
-}
-
-function getRoomDetails(roomId) {
-    if (roomId === "global_group") {
-        return { name: "グループチャット（全体）", iconUrl: "" };
-    }
-    if (roomsCache[roomId]) {
-        return roomsCache[roomId];
-    }
-    const saved = localStorage.getItem(`room_name_${roomId}`);
-    if (saved) return { name: saved, iconUrl: "" };
-    
-    if (roomId.startsWith("custom_")) {
-        return { name: "グループ: " + roomId.replace("custom_", ""), iconUrl: "" };
-    }
-    return { name: "グループチャット", iconUrl: "" };
-}
-
-// 認証状態の監視
-onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        currentUserId = user.uid;
-        const userDocRef = doc(db, "users", currentUserId);
-        const userDoc = await getDoc(userDocRef);
-        
-        if(userDoc.exists()) {
-            const uData = userDoc.data();
-            currentUserName = uData.name || "";
-            currentUserIconUrl = uData.iconUrl || "";
-            currentUserStatus = uData.status || "";
-        } else {
-            currentUserName = user.displayName || "";
-            currentUserIconUrl = user.photoURL || "";
-            await setDoc(userDocRef, {
-                uid: user.uid,
-                name: currentUserName,
-                email: user.email,
-                iconUrl: currentUserIconUrl
-            });
+function startRoomsListener(uid) {
+    const joinedRooms = query(collection(db, 'rooms'), where('members', 'array-contains', uid));
+    let listedRoomsFromServer = false;
+    unsubscribeRooms = onSnapshot(joinedRooms, { includeMetadataChanges: true }, snapshot => {
+        rooms = new Map(snapshot.docs.map(room => [room.id, room.data()]));
+        for (const [roomId, feed] of roomFeeds) {
+            if (rooms.has(roomId)) continue;
+            feed.unsubscribe();
+            roomFeeds.delete(roomId);
         }
-        
-        const isNameInvalid = !currentUserName || currentUserName === "名無しさん" || currentUserName === "Googleユーザー" || currentUserName.trim() === "";
-        if (isNameInvalid) {
-            openProfileModal();
+        for (const roomId of rooms.keys()) watchRoomMessages(roomId, listedRoomsFromServer);
+        if (!snapshot.metadata.fromCache) listedRoomsFromServer = true;
+        if (currentRoomId && !rooms.has(currentRoomId) && !snapshot.metadata.fromCache) {
+            closeRoom();
+            showScreen('list');
         }
-
-        memberMainTitle.textContent = `友だち (${currentUserName})`;
-        renderMyProfileCard();
-        showScreen('member');
-        
-        startGlobalListener(); 
-        startMemberListListener(); 
-        startRoomsListener(); 
-        
-        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-            Notification.requestPermission();
-        }
-    } else {
-        showScreen('auth');
-        authName.style.display = "none";
-    }
-});
-
-function startMemberListListener() {
-    onSnapshot(collection(db, "users"), (snapshot) => {
-        memberList.innerHTML = "";
-        snapshot.forEach((userDoc) => {
-            const uData = userDoc.data();
-            usersCache[uData.uid] = {
-                name: uData.name,
-                iconUrl: uData.iconUrl || "",
-                status: uData.status || ""
-            };
-
-            if(uData.uid === currentUserId) return; 
-
-            const item = document.createElement('div');
-            item.className = "list-item";
-            const shortName = uData.name ? uData.name.substring(0, 2) : "友";
-            const iconHtml = uData.iconUrl
-                ? `<img src="${uData.iconUrl}" alt="アイコン">`
-                : shortName;
-
-            const statusHtml = uData.status 
-                ? `<div style="font-size: 0.75rem; color: #53b63e; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; margin-top: 2px;">💬 ${uData.status}</div>` 
-                : "";
-
-            item.innerHTML = `
-                <div class="item-icon">${iconHtml}</div>
-                <div class="item-info">
-                    <div class="item-name">${uData.name}</div>
-                    ${statusHtml}
-                    <div class="item-sub" style="margin-top: 2px;">タップして個人トークを開く</div>
-                </div>
-            `;
-            item.addEventListener('click', () => {
-                openPrivateChat(uData.uid, uData.name);
-            });
-            memberList.appendChild(item);
-        });
-    });
-}
-
-saveRoomBtn.addEventListener('click', () => {
-    const pw = roomInput.value.trim();
-    if (pw === "") {
-        openCreateRoomModal("");
-        return;
-    }
-    
-    const roomId = "custom_" + pw;
-    if (roomsCache[roomId]) {
-        openRoom(roomId, roomsCache[roomId].name);
-        roomInput.value = "";
-    } else {
-        openCreateRoomModal(pw);
-    }
-});
-
-async function sendMessage() {
-    const text = chatInput.value.trim();
-    if (text === "" || !currentUserId) return;
-
-    try {
-        const messageData = {
-            roomId: currentRoomId,
-            userId: currentUserId,
-            userName: currentUserName,
-            userIconUrl: currentUserIconUrl || "",
-            messageText: text,
-            type: "text",
-            timestamp: serverTimestamp(),
-            readUsers: [currentUserId]
-        };
-
-        if (replyToMessage) {
-            messageData.replyTo = replyToMessage;
-        }
-
-        await addDoc(collection(db, "messages"), messageData);
-        chatInput.value = "";
-
-        replyToMessage = null;
-        if (replyPreviewBox) replyPreviewBox.classList.remove('active');
-    } catch (err) { alert("送信失敗: " + err.message); }
-}
-sendBtn.addEventListener('click', sendMessage);
-chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-
-async function sendSticker(sticker) {
-    if (!currentUserId || !currentRoomId) return;
-    try {
-        await addDoc(collection(db, "messages"), {
-            roomId: currentRoomId,
-            userId: currentUserId,
-            userName: currentUserName,
-            userIconUrl: currentUserIconUrl || "",
-            messageText: sticker,
-            type: "sticker",
-            timestamp: serverTimestamp(),
-            readUsers: [currentUserId]
-        });
-    } catch (err) {
-        console.error("スタンプ送信エラー:", err);
-    }
-}
-
-imageInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file || !currentUserId) return;
-
-    sendBtn.disabled = true;
-    sendBtn.textContent = "送信中";
-    
-    let imgUrl = "";
-
-    const formData = new FormData();
-    formData.append('image', file);
-    try {
-        const response = await fetch('https://api.imgur.com/3/image', {
-            method: 'POST',
-            headers: { Authorization: 'Client-ID 7f20108ecf661ff' }, 
-            body: formData
-        });
-        const result = await response.json();
-        if (result.success) {
-            imgUrl = result.data.link;
-        }
-    } catch (err) {
-        console.warn("Imgurへのアップロードが失敗しました。Base64での直接保存に切り替えます:", err);
-    }
-
-    if (!imgUrl) {
-        try {
-            imgUrl = await compressAndConvertToBase64(file, 800, 800, 0.7);
-        } catch (compressErr) {
-            alert("画像の圧縮に失敗しました。");
-            sendBtn.disabled = false;
-            sendBtn.textContent = "送信";
-            imageInput.value = "";
-            return;
-        }
-    }
-
-    try {
-        await addDoc(collection(db, "messages"), {
-            roomId: currentRoomId,
-            userId: currentUserId,
-            userName: currentUserName,
-            userIconUrl: currentUserIconUrl || "",
-            imageUrl: imgUrl,
-            type: "image",
-            timestamp: serverTimestamp(),
-            readUsers: [currentUserId]
-        });
-    } catch (err) {
-        alert("画像送信エラー: " + err.message);
-    } finally { // ✕ 「finaly」のタイポを「finally」に修正！
-        imageInput.value = "";
-        sendBtn.disabled = false;
-        sendBtn.textContent = "送信";
-    }
-});
-
-function openRoom(roomId, title) {
-    currentRoomId = roomId;
-    
-    let iconUrl = "";
-    let roomTitleName = title;
-    if (roomId.startsWith("private_")) {
-        const otherUserId = roomId.replace("private_", "").split("_").find(id => id !== currentUserId);
-        const otherUser = usersCache[otherUserId];
-        roomTitleName = otherUser ? otherUser.name : title;
-        iconUrl = otherUser ? otherUser.iconUrl : "";
-    } else {
-        const details = getRoomDetails(roomId);
-        roomTitleName = details.name;
-        iconUrl = details.iconUrl;
-    }
-    
-    const iconHtml = iconUrl 
-        ? `<img src="${iconUrl}" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.4); margin-right: 4px;">`
-        : "";
-    
-    chatTitle.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; gap: 8px;">${iconHtml}<span>${roomTitleName}</span></div>`;
-    
-    showScreen('room');
-
-    if (unsubscribeChat) unsubscribeChat();
-    chatLog.innerHTML = "";
-    startChatLiveUpdate();
-    
-    registerRoomMember(roomId);
-    startAnnouncementListener(roomId);
-}
-
-backBtn.addEventListener('click', () => {
-    showScreen('list');
-    if (unsubscribeChat) unsubscribeChat();
-    currentRoomId = "";
-    renderRoomList();
-    document.getElementById('groupDrawer').classList.remove('active');
-    
-    if (activeAnnouncementUnsubscribe) {
-        activeAnnouncementUnsubscribe();
-        activeAnnouncementUnsubscribe = null;
-    }
-    const announcementBar = document.getElementById('announcementBar');
-    if (announcementBar) {
-        announcementBar.classList.remove('active');
-    }
-});
-
-function startAnnouncementListener(roomId) {
-    if (activeAnnouncementUnsubscribe) activeAnnouncementUnsubscribe();
-    
-    const announcementBar = document.getElementById('announcementBar');
-    const announcementText = document.getElementById('announcementText');
-    if (!announcementBar || !announcementText) return;
-    
-    const announcementRef = doc(db, "rooms", roomId, "announcements", "active");
-    
-    activeAnnouncementUnsubscribe = onSnapshot(announcementRef, (docSnap) => {
-        if (docSnap.exists() && docSnap.data().messageId) {
-            const data = docSnap.data();
-            announcementText.textContent = data.text;
-            announcementBar.classList.add('active');
-            
-            announcementBar.onclick = (e) => {
-                if (e.target.id === 'closeAnnounceBtn') return; 
-                
-                const targetElement = document.getElementById(`msg_${data.messageId}`);
-                if (targetElement) {
-                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    const bubble = targetElement.querySelector('.bubble');
-                    if (bubble) {
-                        bubble.style.transition = "background-color 0.3s ease";
-                        const originalBg = bubble.style.backgroundColor;
-                        bubble.style.backgroundColor = "#fef08a"; 
-                        setTimeout(() => {
-                            bubble.style.backgroundColor = originalBg;
-                        }, 1500);
-                    }
-                } else {
-                    alert("該当のメッセージが見つかりません（過去ログに埋もれているか、削除されています）");
-                }
-            };
-        } else {
-            announcementBar.classList.remove('active');
-        }
-    });
-}
-
-const closeAnnounceBtn = document.getElementById('closeAnnounceBtn');
-if (closeAnnounceBtn) {
-    closeAnnounceBtn.addEventListener('click', async (e) => {
-        e.stopPropagation(); 
-        if (!currentRoomId) return;
-        try {
-            const announcementRef = doc(db, "rooms", currentRoomId, "announcements", "active");
-            await deleteDoc(announcementRef);
-        } catch (err) {
-            console.error("アナウンス解除エラー:", err);
-        }
-    });
-}
-
-// メッセージ操作モーダル周りの挙動
-function openMessageActionModal(messageId, userId, userName, messageText, elementId) {
-    selectedMessageForAction = { id: messageId, userId, userName, messageText, elementId };
-    
-    if (userId === currentUserId) {
-        actionUnsendBtn.style.display = "block";
-    } else {
-        actionUnsendBtn.style.display = "none";
-    }
-    
-    messageActionModal.classList.add('active');
-}
-
-function closeMessageActionModal() {
-    messageActionModal.classList.remove('active');
-    selectedMessageForAction = null;
-}
-
-if (actionCloseBtn) {
-    actionCloseBtn.addEventListener('click', closeMessageActionModal);
-}
-
-if (actionUnsendBtn) {
-    actionUnsendBtn.addEventListener('click', async () => {
-        if (!selectedMessageForAction) return;
-        const msgId = selectedMessageForAction.id;
-        try {
-            const docRef = doc(db, "messages", msgId);
-            await updateDoc(docRef, {
-                type: "unsent",
-                messageText: "送信取り消しされました"
-            });
-            closeMessageActionModal();
-        } catch (err) {
-            alert("送信取り消しに失敗しました: " + err.message);
-        }
-    });
-}
-
-if (actionAnnounceBtn) {
-    actionAnnounceBtn.addEventListener('click', async () => {
-        if (!selectedMessageForAction || !currentRoomId) return;
-        const msgId = selectedMessageForAction.id;
-        const senderName = selectedMessageForAction.userName;
-        const text = selectedMessageForAction.messageText;
-        
-        try {
-            const announcementRef = doc(db, "rooms", currentRoomId, "announcements", "active");
-            await setDoc(announcementRef, {
-                text: `${senderName}: ${text}`,
-                messageId: msgId,
-                pinnedBy: currentUserName,
-                pinnedAt: serverTimestamp()
-            });
-            closeMessageActionModal();
-        } catch (err) {
-            alert("アナウンスの設定に失敗しました: " + err.message);
-        }
-    });
-}
-
-if (actionReplyBtn) {
-    actionReplyBtn.addEventListener('click', () => {
-        if (!selectedMessageForAction) return;
-        
-        replyToMessage = {
-            id: selectedMessageForAction.id,
-            userName: selectedMessageForAction.userName,
-            messageText: selectedMessageForAction.messageText
-        };
-        
-        if (replyPreviewText) {
-            replyPreviewText.textContent = `${selectedMessageForAction.userName}さんへのリプライ: ${selectedMessageForAction.messageText}`;
-        }
-        if (replyPreviewBox) {
-            replyPreviewBox.classList.add('active');
-        }
-        
-        closeMessageActionModal();
-        chatInput.focus();
-    });
-}
-
-if (cancelReplyBtn) {
-    cancelReplyBtn.addEventListener('click', () => {
-        replyToMessage = null;
-        if (replyPreviewBox) {
-            replyPreviewBox.classList.remove('active');
-        }
-    });
-}
-
-function openPrivateChat(targetUserId, targetUserName) {
-    if (targetUserId === currentUserId) return;
-    const sortedIds = [currentUserId, targetUserId].sort();
-    const privateRoomId = `private_${sortedIds[0]}_${sortedIds[1]}`;
-    
-    const privateTitle = getSavedRoomName(privateRoomId) || targetUserName;
-    openRoom(privateRoomId, privateTitle);
-}
-
-async function registerRoomMember(roomId) {
-    if (!currentUserId || !currentUserName) return;
-    try {
-        const memberRef = doc(db, "rooms", roomId, "members", currentUserId);
-        await setDoc(memberRef, {
-            uid: currentUserId,
-            name: currentUserName,
-            iconUrl: currentUserIconUrl || "",
-            lastActive: serverTimestamp()
-        });
-    } catch (err) {
-        console.error("メンバー登録エラー:", err);
-    }
-}
-
-let unsubscribeDrawer = null;
-function openGroupDrawer() {
-    const drawer = document.getElementById('groupDrawer');
-    const memberListEl = document.getElementById('drawerMemberList');
-    const memberCountEl = document.getElementById('drawerMemberCount');
-    const nameInput = document.getElementById('drawerRoomNameInput');
-    
-    nameInput.value = chatTitle.textContent;
-    drawer.classList.add('active');
-    
-    if (unsubscribeDrawer) unsubscribeDrawer();
-    
-    const membersRef = collection(db, "rooms", currentRoomId, "members");
-    unsubscribeDrawer = onSnapshot(membersRef, (snapshot) => {
-        memberListEl.innerHTML = "";
-        memberCountEl.textContent = `メンバー (${snapshot.size})`;
-        
-        snapshot.forEach((memberDoc) => {
-            const mData = memberDoc.data();
-            const shortName = mData.name ? mData.name.substring(0, 2) : "他";
-            const iconHtml = mData.iconUrl 
-                ? `<img src="${mData.iconUrl}" alt="アイコン">`
-                : shortName;
-                
-            const item = document.createElement('div');
-            item.className = "drawer-member-item";
-            item.innerHTML = `
-                <div class="drawer-member-icon">${iconHtml}</div>
-                <div class="drawer-member-name">${mData.name}</div>
-            `;
-            memberListEl.appendChild(item);
-        });
-    });
-}
-
-menuBtn.addEventListener('click', openGroupDrawer);
-
-document.getElementById('closeDrawerBtn').addEventListener('click', () => {
-    document.getElementById('groupDrawer').classList.remove('active');
-    if (unsubscribeDrawer) { unsubscribeDrawer(); unsubscribeDrawer = null; }
-});
-
-document.getElementById('drawerRoomNameSaveBtn').addEventListener('click', () => {
-    const newName = document.getElementById('drawerRoomNameInput').value.trim();
-    if (newName !== "") {
-        localStorage.setItem(`room_name_${currentRoomId}`, newName);
-        chatTitle.textContent = newName;
-        document.getElementById('groupDrawer').classList.remove('active');
-        if (unsubscribeDrawer) { unsubscribeDrawer(); unsubscribeDrawer = null; }
         renderRoomList();
-    }
-});
-
-function getSavedRoomName(roomId) { return localStorage.getItem(`room_name_${roomId}`); }
-
-// 5. グローバルメッセージ監視
-function startGlobalListener() {
-    const qAll = query(collection(db, "messages"), orderBy("timestamp", "desc"));
-    onSnapshot(qAll, (snapshot) => {
-        let newMessagesToNotify = [];
-        
-        snapshot.docChanges().forEach((change) => {
-            if (change.type === "added") {
-                const msg = { id: change.doc.id, ...change.doc.data() };
-                if (!isInitialLoad) {
-                    if (msg.userId !== currentUserId && msg.roomId !== currentRoomId) {
-                        
-                        let isForMe = false;
-
-                        if (msg.roomId === "global_group") {
-                            isForMe = true;
-                        } else if (msg.roomId.startsWith("custom_")) {
-                            if (roomsCache[msg.roomId]) {
-                                isForMe = true;
-                            }
-                        } else if (msg.roomId.startsWith("private_")) {
-                            if (currentUserId && msg.roomId.includes(currentUserId)) {
-                                isForMe = true;
-                            }
-                        }
-
-                        if (isForMe) {
-                            newMessagesToNotify.push(msg);
-                        }
-                    }
-                }
-            }
-        });
-        
-        if (isInitialLoad && snapshot.size > 0) {
-            isInitialLoad = false;
-        }
-        
-        if (newMessagesToNotify.length > 0) {
-            newMessagesToNotify.sort((a, b) => {
-                const timeA = a.timestamp ? a.timestamp.toDate().getTime() : 0;
-                const timeB = b.timestamp ? b.timestamp.toDate().getTime() : 0;
-                return timeB - timeA;
-            });
-            showInAppNotification(newMessagesToNotify[0]);
-        }
-
-        allMessages = [];
-        snapshot.forEach(doc => { allMessages.push({ id: doc.id, ...doc.data() }); });
-        renderRoomList(); 
-        updateTabBadges(); 
-    });
+    }, error => console.error('トーク一覧の取得に失敗しました。', error));
 }
 
-function showInAppNotification(msg) {
-    const banner = document.getElementById('notificationBanner');
-    const notiIcon = document.getElementById('notiIcon');
-    const notiTitle = document.getElementById('notiTitle');
-    const notiText = document.getElementById('notiText');
-    
-    const senderName = msg.userName || "誰か";
-    const shortName = senderName.substring(0, 2);
-    
-    if (msg.userIconUrl) {
-        notiIcon.innerHTML = `<img src="${msg.userIconUrl}" alt="アバター">`;
-    } else {
-        notiIcon.textContent = shortName;
-        notiIcon.style.background = "linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)";
-    }
-    
-    let titleText = senderName;
-    if (msg.roomId === "global_group") {
-        titleText = `全体チャット - ${senderName}`;
-    } else if (msg.roomId.startsWith("custom_")) {
-        const details = getRoomDetails(msg.roomId);
-        titleText = `${details.name} - ${senderName}`;
-    } else if (msg.roomId.startsWith("private_")) {
-        titleText = `個人トーク - ${senderName}`;
-    }
-    
-    const messageContent = msg.type === "image" ? "[画像が送信されました]" : msg.messageText;
-    
-    notiTitle.textContent = titleText;
-    notiText.textContent = messageContent;
-    
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        try {
-            const systemNoti = new Notification(titleText, {
-                body: messageContent,
-                icon: msg.userIconUrl || 'https://www.gstatic.com/images/branding/product/2x/avatar_square_blue_120dp.png', 
-                tag: msg.roomId, 
-                renotify: true   
-            });
-            
-            systemNoti.onclick = () => {
-                window.focus();
-                let roomTitle = "トーク";
-                if (msg.roomId === "global_group") {
-                    roomTitle = "グループチャット（全体）";
-                } else if (msg.roomId.startsWith("custom_")) {
-                    const details = getRoomDetails(msg.roomId);
-                    roomTitle = details.name;
-                } else if (msg.roomId.startsWith("private_")) {
-                    roomTitle = senderName;
-                }
-                openRoom(msg.roomId, roomTitle);
-                systemNoti.close();
-            };
-        } catch (e) {
-            console.error("OS標準通知の送信に失敗しました:", e);
+function watchRoomMessages(roomId, notifyFirstUnread = false) {
+    if (roomFeeds.has(roomId)) return;
+    const feed = { messages: [], byId: new Map(), synced: false, pendingReceipts: new Set() };
+    roomFeeds.set(roomId, feed);
+    const history = query(collection(db, 'rooms', roomId, 'messages'), orderBy('timestamp', 'asc'));
+    feed.unsubscribe = onSnapshot(history, { includeMetadataChanges: true }, snapshot => {
+        const messages = snapshot.docs.map(record => ({ ...record.data(), id: record.id })).filter(message => message.timestamp);
+        const firstServerSnapshot = !feed.synced && !snapshot.metadata.fromCache;
+        if (roomId !== currentRoomId && (feed.synced || (notifyFirstUnread && firstServerSnapshot))) {
+            const latest = messages.findLast(message => (firstServerSnapshot || !feed.byId.has(message.id)) &&
+                message.senderId !== currentUserId && message.type !== 'unsent' &&
+                !message.readUsers.includes(currentUserId));
+            if (latest) showInAppNotification(roomId, latest);
         }
-    }
-    
-    const newBanner = banner.cloneNode(true);
-    banner.parentNode.replaceChild(newBanner, banner);
-    
-    newBanner.addEventListener('click', (e) => {
-        if (e.target.id === 'notiCloseBtn') return;
-        
-        let roomTitle = "トーク";
-        if (msg.roomId === "global_group") {
-            roomTitle = "グループチャット（全体）";
-        } else if (msg.roomId.startsWith("custom_")) {
-            const details = getRoomDetails(msg.roomId);
-            roomTitle = details.name;
-        } else if (msg.roomId.startsWith("private_")) {
-            roomTitle = senderName;
-        }
-        openRoom(msg.roomId, roomTitle);
-        newBanner.classList.remove('active');
-    });
-    
-    newBanner.querySelector('#notiCloseBtn').addEventListener('click', () => {
-        newBanner.classList.remove('active');
-    });
-    
-    newBanner.classList.add('active');
-    
-    if (bannerTimeout) clearTimeout(bannerTimeout);
-    bannerTimeout = setTimeout(() => {
-        newBanner.classList.remove('active');
-    }, 4000);
+        feed.messages = messages;
+        feed.byId = new Map(messages.map(message => [message.id, message]));
+        if (!snapshot.metadata.fromCache) feed.synced = true;
+        if (roomId === currentRoomId) renderChat();
+        renderRoomList();
+    }, error => console.error('メッセージの取得に失敗しました。', error));
 }
 
-function updateTabBadges() {
-    let totalUnread = 0;
-    const roomsUnread = {};
-    
-    allMessages.forEach(msg => {
-        if (!msg.timestamp) return;
-        let rId = msg.roomId || "global_group";
-        let isForMe = false;
-        
-        if (rId === "global_group") {
-            isForMe = true;
-        } else if (rId.startsWith("custom_")) {
-            isForMe = true;
-        } else if (currentUserId && currentUserId !== "null" && currentUserId !== "undefined" && rId.startsWith("private_") && rId.includes(currentUserId)) {
-            isForMe = true;
-        }
-        
-        if (isForMe) {
-            if (roomsUnread[rId] === undefined) roomsUnread[rId] = 0;
-            if (msg.userId !== currentUserId && (!msg.readUsers || !msg.readUsers.includes(currentUserId))) {
-                roomsUnread[rId]++;
-            }
-        }
-    });
-    
-    Object.keys(roomsUnread).forEach(rId => {
-        totalUnread += roomsUnread[rId];
-    });
-    
-    const tabTalk = document.getElementById('tabTalk');
-    const tabTalk2 = document.getElementById('tabTalk2');
-    if (!tabTalk || !tabTalk2) return;
-    
-    const existingBadge1 = tabTalk.querySelector('.tab-badge');
-    if (existingBadge1) existingBadge1.remove();
-    const existingBadge2 = tabTalk2.querySelector('.tab-badge');
-    if (existingBadge2) existingBadge2.remove();
-    
-    if (totalUnread > 0) {
-        const badgeSpan1 = document.createElement('span');
-        badgeSpan1.className = 'tab-badge';
-        badgeSpan1.textContent = totalUnread > 99 ? '99+' : totalUnread;
-        tabTalk.appendChild(badgeSpan1);
-        
-        const badgeSpan2 = document.createElement('span');
-        badgeSpan2.className = 'tab-badge';
-        badgeSpan2.textContent = totalUnread > 99 ? '99+' : totalUnread;
-        tabTalk2.appendChild(badgeSpan2);
-    }
+function roomDetails(roomId) {
+    const room = rooms.get(roomId);
+    const peer = room.kind === 'direct' ? members.get(room.members.find(uid => uid !== currentUserId)) : room;
+    const localName = localStorage.getItem(`room_name_${roomId}`);
+    return { name: localName || peer?.name || '個人トーク', iconUrl: peer?.iconUrl || '' };
+}
+
+function messageSummary(message) {
+    if (message.type === 'image') return '[画像]';
+    if (message.type === 'unsent') return '送信を取り消しました';
+    return message.text;
 }
 
 function renderRoomList() {
-    roomList.innerHTML = "";
-    const roomsData = {};
-    
-    const globalDetails = getRoomDetails("global_group");
-    roomsData["global_group"] = { 
-        name: globalDetails.name, 
-        iconUrl: globalDetails.iconUrl,
-        lastMsg: "まだメッセージはありません", 
-        unread: 0, 
-        timestamp: 0 
-    };
-
-    allMessages.forEach(msg => {
-        if (!msg.timestamp) return;
-        let rId = msg.roomId || "global_group";
-        let isForMe = false;
-
-        if (rId === "global_group") {
-            isForMe = true;
-        } else if (rId.startsWith("custom_")) {
-            isForMe = true;
-        } else if (currentUserId && currentUserId !== "null" && currentUserId !== "undefined" && rId.startsWith("private_") && rId.includes(currentUserId)) {
-            isForMe = true;
-        }
-
-        if (isForMe) {
-            let roomName = "";
-            let roomIcon = "";
-            
-            if (rId.startsWith("private_")) {
-                const otherUserId = rId.replace("private_", "").split("_").find(id => id !== currentUserId);
-                const otherUser = usersCache[otherUserId];
-                roomName = otherUser ? otherUser.name : "個人トーク";
-                roomIcon = otherUser ? otherUser.iconUrl : "";
-            } else {
-                const details = getRoomDetails(rId);
-                roomName = details.name;
-                roomIcon = details.iconUrl;
-            }
-
-            if (!roomsData[rId]) { 
-                roomsData[rId] = { name: roomName, iconUrl: roomIcon, lastMsg: "", unread: 0, timestamp: 0 }; 
-            } else {
-                roomsData[rId].name = roomName;
-                roomsData[rId].iconUrl = roomIcon;
-            }
-
-            if (roomsData[rId].timestamp === 0) {
-                roomsData[rId].lastMsg = msg.type === "image" ? "[画像]" : `${msg.userName}: ${msg.messageText}`;
-                roomsData[rId].timestamp = msg.timestamp.toDate().getTime();
-            }
-            if (currentUserId && currentUserId !== "null" && currentUserId !== "undefined" && msg.userId !== currentUserId && (!msg.readUsers || !msg.readUsers.includes(currentUserId))) {
-                roomsData[rId].unread++;
-            }
-        }
+    const entries = [...rooms.keys()].map(id => {
+        const messages = roomFeeds.get(id)?.messages || [];
+        const latest = messages.at(-1);
+        const unread = messages.filter(message => message.type !== 'unsent' &&
+            !message.readUsers.includes(currentUserId)).length;
+        return { id, latest, unread };
     });
-
-    const sortedRooms = Object.keys(roomsData).sort((a,b) => roomsData[b].timestamp - roomsData[a].timestamp);
-    sortedRooms.forEach(roomId => {
-        const room = roomsData[roomId];
-        const item = document.createElement('div');
-        item.className = "list-item";
-        const shortName = room.name ? room.name.substring(0, 2) : "ト";
-        const badgeHtml = room.unread > 0 ? `<span class="room-badge">${room.unread}</span>` : "";
-        const iconHtml = room.iconUrl 
-            ? `<img src="${room.iconUrl}" alt="アイコン">`
-            : shortName;
-
-        item.innerHTML = `
-            <div class="item-icon">${iconHtml}</div>
-            <div class="item-info">
-                <div class="item-name">${room.name}</div>
-                <div class="item-sub">${room.lastMsg}</div>
-            </div>
-            ${badgeHtml}
-        `;
-        item.addEventListener('click', () => { openRoom(roomId, room.name); });
-        roomList.appendChild(item);
-    });
+    entries.sort((first, second) => (second.latest?.timestamp.toMillis() || 0) - (first.latest?.timestamp.toMillis() || 0));
+    roomList.replaceChildren();
+    let totalUnread = 0;
+    for (const { id, latest, unread } of entries) {
+        const { name, iconUrl } = roomDetails(id);
+        const preview = latest ? `${latest.senderName}: ${messageSummary(latest)}` : 'まだメッセージはありません';
+        const item = listItem(name, iconUrl, preview, () => openRoom(id));
+        if (unread) item.append(element('span', 'room-badge', unread));
+        totalUnread += unread;
+        roomList.append(item);
+    }
+    for (const tab of [byId('tabTalk'), byId('tabTalk2')]) {
+        tab.querySelector('.tab-badge')?.remove();
+        if (totalUnread) tab.append(element('span', 'tab-badge', totalUnread > 99 ? '99+' : totalUnread));
+    }
 }
 
-function startChatLiveUpdate() {
-    const q = query(collection(db, "messages"), where("roomId", "==", currentRoomId), orderBy("timestamp", "asc"));
-    unsubscribeChat = onSnapshot(q, (snapshot) => {
-        chatLog.innerHTML = "";
-        snapshot.forEach((snapshotDoc) => {
-            const data = snapshotDoc.data();
-            if (!data.timestamp) return;
+const notificationBanner = element('div', 'notification-banner');
+const notificationIcon = element('div', 'notification-icon');
+const notificationTitle = element('div', 'notification-title');
+const notificationText = element('div', 'notification-text');
+const notificationInfo = element('div', 'notification-info');
+const notificationClose = element('button', 'notification-close', '×');
+notificationInfo.append(notificationTitle, notificationText);
+notificationBanner.append(notificationIcon, notificationInfo, notificationClose);
+document.querySelector('.chat-container').append(notificationBanner);
+let notificationRoomId;
 
-            const date = data.timestamp.toDate();
-            const timeStr = date.getHours() + ":" + String(date.getMinutes()).padStart(2, '0');
-            const isMe = data.userId === currentUserId;
+notificationBanner.addEventListener('click', () => {
+    if (rooms.has(notificationRoomId)) openRoom(notificationRoomId);
+    notificationBanner.classList.remove('active');
+});
+notificationClose.addEventListener('click', event => {
+    event.stopPropagation();
+    notificationBanner.classList.remove('active');
+});
 
-            if (data.type === "unsent") {
-                let systemMsgHtml = document.createElement('div');
-                systemMsgHtml.className = "message unsent";
-                systemMsgHtml.id = `msg_${snapshotDoc.id}`;
-                systemMsgHtml.innerHTML = `
-                    <div class="bubble">${data.userName}がメッセージの送信を取り消しました</div>
-                `;
-                chatLog.appendChild(systemMsgHtml);
-                return;
-            }
+function showInAppNotification(roomId, message) {
+    notificationRoomId = roomId;
+    setAvatar(notificationIcon, message.senderName, message.senderIconUrl);
+    const title = rooms.get(roomId).kind === 'group'
+        ? `${roomDetails(roomId).name} - ${message.senderName}`
+        : message.senderName;
+    const body = messageSummary(message);
+    notificationTitle.textContent = title;
+    notificationText.textContent = body;
+    notificationBanner.classList.add('active');
+    clearTimeout(bannerTimeout);
+    bannerTimeout = setTimeout(() => notificationBanner.classList.remove('active'), 4000);
 
-            const uniqueReadUsers = data.readUsers
-                ? [...new Set(data.readUsers.filter(uid => uid && uid !== "null" && uid !== "undefined"))]
-                : [];
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            const notification = new Notification(title, { body, icon: message.senderIconUrl || 'icon.png', tag: roomId });
+            notification.onclick = () => {
+                window.focus();
+                if (rooms.has(roomId)) openRoom(roomId);
+                notification.close();
+            };
+        } catch {
+            // OS 通知が使えないブラウザでもアプリ内通知を表示する。
+        }
+    }
+}
 
-            if (currentUserId && currentUserId !== "null" && currentUserId !== "undefined" && !isMe && !uniqueReadUsers.includes(currentUserId)) {
-                const docRef = doc(db, "messages", snapshotDoc.id);
-                updateDoc(docRef, { readUsers: arrayUnion(currentUserId) });
-                if (!uniqueReadUsers.includes(currentUserId)) {
-                    uniqueReadUsers.push(currentUserId);
-                }
-            }
+function renderRoomTitle() {
+    const { name, iconUrl } = roomDetails(currentRoomId);
+    chatTitle.replaceChildren();
+    if (iconUrl) appendImage(chatTitle, iconUrl, '');
+    chatTitle.append(element('span', '', name));
+}
 
-            const hasSender = uniqueReadUsers.includes(data.userId);
-            const readCount = hasSender ? uniqueReadUsers.length - 1 : uniqueReadUsers.length;
-            const readText = readCount > 0 ? (currentRoomId.startsWith("private_") ? "既読" : `既読 ${readCount}`) : "";
+function closeRoom() {
+    unsubscribeAnnouncement?.();
+    unsubscribeAnnouncement = undefined;
+    announcementId = undefined;
+    announcementBar.classList.remove('active');
+    groupDrawer.classList.remove('active');
+    messageActionModal.classList.remove('active');
+    stickerPicker.classList.remove('active');
+    selectedMessage = undefined;
+    clearReply();
+    chatInput.value = '';
+    chatLog.replaceChildren();
+    currentRoomId = null;
+}
 
-            let replyQuoteHtml = "";
-            if (data.replyTo) {
-                replyQuoteHtml = `<div class="reply-quote-box" data-target-id="${data.replyTo.id}"><div style="font-weight: bold; font-size: 0.75rem; margin-bottom: 2px;">${data.replyTo.userName}</div><div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">${data.replyTo.messageText}</div></div>`;
-            }
+function openRoom(roomId) {
+    if (!rooms.has(roomId)) return;
+    if (currentRoomId === roomId) return;
+    closeRoom();
+    currentRoomId = roomId;
+    showScreen('room');
+    renderRoomTitle();
+    watchRoomMessages(roomId);
+    renderChat();
+    unsubscribeAnnouncement = onSnapshot(doc(db, 'rooms', roomId, 'announcements', 'active'), snapshot => {
+        announcementId = snapshot.data()?.messageId;
+        renderAnnouncement();
+    }, error => console.error('アナウンスの取得に失敗しました。', error));
+}
 
-            let contentHtml = "";
-            let isSticker = data.type === "sticker";
-            let bubbleClass = isSticker ? "bubble sticker-bubble" : "bubble";
+byId('backBtn').addEventListener('click', () => {
+    closeRoom();
+    showScreen('list');
+});
 
-            if (isSticker) {
-                contentHtml = `<span>${data.messageText}</span>`;
-            } else if (data.type === "image" || data.imageUrl) {
-                contentHtml = `<img src="${data.imageUrl}" class="sent-image" alt="画像">`;
-            } else { 
-                contentHtml = `<div>${data.messageText}</div>`; 
-            }
+function renderDrawerMembers() {
+    const { members: participantIds } = rooms.get(currentRoomId);
+    byId('drawerMemberCount').textContent = `メンバー (${participantIds.length})`;
+    const participants = byId('drawerMemberList');
+    participants.replaceChildren();
+    for (const uid of participantIds) {
+        const profile = members.get(uid);
+        const name = profile?.name || 'メンバー';
+        const item = element('div', 'drawer-member-item');
+        const icon = element('div', 'drawer-member-icon');
+        setAvatar(icon, name, profile?.iconUrl);
+        item.append(icon, element('div', 'drawer-member-name', name));
+        participants.append(item);
+    }
+}
 
-            let messageHtml = document.createElement('div');
-            messageHtml.id = `msg_${snapshotDoc.id}`;
-            if (isMe) {
-                messageHtml.className = "message sent";
-                messageHtml.innerHTML = `
-                    <div class="${bubbleClass}">${replyQuoteHtml}${contentHtml}</div>
-                    <div class="status-area">
-                        <span class="read-status">${readText}</span>
-                        <span class="time">${timeStr}</span>
-                    </div>
-                `;
-            } else {
-                messageHtml.className = "message received";
-                const displayName = data.userName || "他";
-                const shortName = displayName.substring(0, 2);
-                const iconHtml = data.userIconUrl 
-                    ? `<img src="${data.userIconUrl}" alt="アバター">`
-                    : shortName;
-                messageHtml.innerHTML = `
-                    <div class="chat-avatar">${iconHtml}</div>
-                    <div class="bubble-wrapper">
-                        <span class="user-name-label">${displayName}</span>
-                        <div class="${bubbleClass}">${replyQuoteHtml}${contentHtml}</div>
-                    </div>
-                    <div class="status-area"><span class="time">${timeStr}</span></div>
-                `;
-            }
-            chatLog.appendChild(messageHtml);
+byId('menuBtn').addEventListener('click', () => {
+    byId('drawerRoomNameInput').value = roomDetails(currentRoomId).name;
+    renderDrawerMembers();
+    groupDrawer.classList.add('active');
+});
+byId('closeDrawerBtn').addEventListener('click', () => groupDrawer.classList.remove('active'));
+byId('drawerRoomNameSaveBtn').addEventListener('click', () => {
+    const name = byId('drawerRoomNameInput').value.trim();
+    if (!name) return;
+    localStorage.setItem(`room_name_${currentRoomId}`, name);
+    groupDrawer.classList.remove('active');
+    renderRoomTitle();
+    renderRoomList();
+});
 
-            let bubbleEl = messageHtml.querySelector('.bubble');
-            if (bubbleEl) {
-                bubbleEl.style.cursor = "pointer";
-                bubbleEl.addEventListener('click', () => {
-                    openMessageActionModal(snapshotDoc.id, data.userId, data.userName, data.messageText || (data.type === "image" ? "[画像]" : "[スタンプ]"), messageHtml.id);
-                });
-            }
+const STICKERS = ['🐱', '🐶', '🐰', '🦊', '🐻', '🐼', '🐨', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦'];
+for (const sticker of STICKERS) {
+    const button = element('button', 'sticker-item', sticker);
+    button.addEventListener('click', () => {
+        stickerPicker.classList.remove('active');
+        sendMessage('sticker', sticker);
+    });
+    stickerPicker.append(button);
+}
+byId('stickerBtn').addEventListener('click', () => stickerPicker.classList.toggle('active'));
 
-            let replyQuoteEl = messageHtml.querySelector('.reply-quote-box');
-            if (replyQuoteEl) {
-                replyQuoteEl.addEventListener('click', (e) => {
-                    e.stopPropagation(); 
-                    const targetId = replyQuoteEl.getAttribute('data-target-id');
-                    const targetElement = document.getElementById(`msg_${targetId}`);
-                    if (targetElement) {
-                        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        const targetBubble = targetElement.querySelector('.bubble');
-                        if (targetBubble) {
-                            targetBubble.style.transition = "background-color 0.3s ease";
-                            const originalBg = targetBubble.style.backgroundColor;
-                            targetBubble.style.backgroundColor = "#fef08a"; 
-                            setTimeout(() => {
-                                targetBubble.style.backgroundColor = originalBg;
-                            }, 1500);
-                        }
-                    } else {
-                        alert("引用元のメッセージが見つかりません（過去ログに埋もれているか、削除されています）");
-                    }
-                });
-            }
+async function sendMessage(type, text = '', imageUrl = '') {
+    const uid = currentUserId;
+    const roomId = currentRoomId;
+    const profile = members.get(uid);
+    if (!roomId || !profile || sendBtn.disabled) return;
+    const replyId = replyToMessage?.id || '';
+    sendBtn.disabled = true;
+    try {
+        await addDoc(collection(db, 'rooms', roomId, 'messages'), {
+            senderId: uid, senderName: profile.name, senderIconUrl: profile.iconUrl,
+            type, text, imageUrl, replyTo: replyId, timestamp: serverTimestamp(), readUsers: [uid]
         });
-        chatLog.scrollTop = chatLog.scrollHeight;
-    });
+        if (roomId === currentRoomId && uid === currentUserId) {
+            if (type === 'text' && chatInput.value.trim() === text) chatInput.value = '';
+            if (replyToMessage?.id === replyId) clearReply();
+        }
+    } catch {
+        alert('メッセージを送信できませんでした。');
+    } finally {
+        sendBtn.disabled = false;
+    }
 }
+
+function sendText() {
+    const text = chatInput.value.trim();
+    if (text) sendMessage('text', text);
+}
+sendBtn.addEventListener('click', sendText);
+chatInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.isComposing) sendText();
+});
+
+imageInput.addEventListener('change', async event => {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file || sendBtn.disabled) return;
+    const roomId = currentRoomId;
+    const uid = currentUserId;
+    sendBtn.disabled = true;
+    sendBtn.textContent = '送信中';
+    let imageUrl = '';
+    try {
+        try {
+            const form = new FormData();
+            form.append('image', file);
+            const response = await fetch('https://api.imgur.com/3/image', {
+                method: 'POST', headers: { Authorization: 'Client-ID 7f20108ecf661ff' }, body: form
+            });
+            const result = await response.json();
+            if (result.success && /^https:\/\/i\.imgur\.com\/[A-Za-z0-9._/-]+$/.test(result.data.link)) {
+                imageUrl = result.data.link;
+            }
+        } catch {
+            // Imgur が利用できない場合は圧縮した画像を送る。
+        }
+        if (!imageUrl) imageUrl = await compressImage(file, 800, 0.7);
+    } catch {
+        alert('画像の読み込みに失敗しました。');
+    } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = '送信';
+    }
+    if (imageUrl && roomId === currentRoomId && uid === currentUserId) sendMessage('image', '', imageUrl);
+});
+
+function clearReply() {
+    replyToMessage = undefined;
+    replyPreviewBox.classList.remove('active');
+}
+byId('cancelReplyBtn').addEventListener('click', clearReply);
+
+function scrollToMessage(id) {
+    const target = byId(`msg_${id}`);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const bubble = target?.querySelector('.bubble');
+    if (bubble) {
+        const backgroundColor = getComputedStyle(bubble).backgroundColor;
+        bubble.animate([{ backgroundColor: '#fef08a', offset: 0 }, { backgroundColor: '#fef08a', offset: 0.8 }, { backgroundColor }], 1500);
+    }
+}
+
+function renderAnnouncement() {
+    const pinned = roomFeeds.get(currentRoomId)?.byId.get(announcementId);
+    announcementBar.classList.toggle('active', Boolean(pinned && pinned.type !== 'unsent'));
+    if (pinned) byId('announcementText').textContent = `${pinned.senderName}: ${messageSummary(pinned)}`;
+}
+announcementBar.addEventListener('click', () => scrollToMessage(announcementId));
+byId('closeAnnounceBtn').addEventListener('click', async event => {
+    event.stopPropagation();
+    if (!currentRoomId) return;
+    try {
+        await deleteDoc(doc(db, 'rooms', currentRoomId, 'announcements', 'active'));
+    } catch {
+        alert('アナウンスを解除できませんでした。');
+    }
+});
+
+function openMessageActions(message) {
+    selectedMessage = message;
+    actionUnsendBtn.style.display = message.senderId === currentUserId ? 'block' : 'none';
+    messageActionModal.classList.add('active');
+}
+
+function closeMessageActions() {
+    messageActionModal.classList.remove('active');
+    selectedMessage = undefined;
+}
+
+byId('actionCloseBtn').addEventListener('click', closeMessageActions);
+byId('actionReplyBtn').addEventListener('click', () => {
+    if (!selectedMessage) return;
+    replyToMessage = selectedMessage;
+    byId('replyPreviewText').textContent = `${selectedMessage.senderName}さんへの返信: ${messageSummary(selectedMessage)}`;
+    replyPreviewBox.classList.add('active');
+    closeMessageActions();
+    chatInput.focus();
+});
+actionUnsendBtn.addEventListener('click', async () => {
+    if (!selectedMessage || !currentRoomId) return;
+    const message = selectedMessage;
+    try {
+        await updateDoc(doc(db, 'rooms', currentRoomId, 'messages', message.id), {
+            type: 'unsent', text: '', imageUrl: '', replyTo: ''
+        });
+        if (selectedMessage === message) closeMessageActions();
+    } catch {
+        alert('送信を取り消せませんでした。');
+    }
+});
+byId('actionAnnounceBtn').addEventListener('click', async () => {
+    if (!selectedMessage || !currentRoomId) return;
+    const message = selectedMessage;
+    try {
+        await setDoc(doc(db, 'rooms', currentRoomId, 'announcements', 'active'), {
+            messageId: message.id, pinnedBy: currentUserId, pinnedAt: serverTimestamp()
+        });
+        if (selectedMessage === message) closeMessageActions();
+    } catch {
+        alert('アナウンスを設定できませんでした。');
+    }
+});
+
+function markRead(roomId, feed, message) {
+    const uid = currentUserId;
+    if (message.readUsers.includes(uid) || feed.pendingReceipts.has(message.id)) return;
+    feed.pendingReceipts.add(message.id);
+    updateDoc(doc(db, 'rooms', roomId, 'messages', message.id), { readUsers: arrayUnion(uid) })
+        .catch(error => console.error('既読にできませんでした。', error))
+        .finally(() => feed.pendingReceipts.delete(message.id));
+}
+
+function renderChat() {
+    const roomId = currentRoomId;
+    const feed = roomFeeds.get(roomId);
+    const atBottom = chatLog.scrollHeight - chatLog.clientHeight - chatLog.scrollTop < 24;
+    const scrollTop = chatLog.scrollTop;
+    const history = document.createDocumentFragment();
+    for (const message of feed.messages) {
+        const isMe = message.senderId === currentUserId;
+        const row = element('div', 'message');
+        row.id = `msg_${message.id}`;
+        if (message.type === 'unsent') {
+            row.classList.add('unsent');
+            row.append(element('div', 'bubble', `${message.senderName}がメッセージの送信を取り消しました`));
+            history.append(row);
+            continue;
+        }
+        row.classList.add(isMe ? 'sent' : 'received');
+        const bubble = element('div', message.type === 'sticker' ? 'bubble sticker-bubble' : 'bubble');
+        if (message.replyTo) {
+            const quoted = feed.byId.get(message.replyTo);
+            if (quoted) {
+                const quote = element('div', 'reply-quote-box');
+                quote.append(element('div', 'reply-quote-user', quoted.senderName),
+                    element('div', 'reply-quote-text', messageSummary(quoted)));
+                quote.addEventListener('click', event => {
+                    event.stopPropagation();
+                    scrollToMessage(quoted.id);
+                });
+                bubble.append(quote);
+            }
+        }
+        if (message.type === 'image') {
+            appendImage(bubble, message.imageUrl, '画像').className = 'sent-image';
+        } else {
+            bubble.append(element('span', '', message.text));
+        }
+        bubble.addEventListener('click', () => openMessageActions(message));
+        const time = message.timestamp.toDate();
+        const status = element('div', 'status-area');
+        if (isMe) {
+            const readCount = message.readUsers.length - 1;
+            if (readCount > 0) {
+                status.append(element('span', 'read-status', rooms.get(roomId).kind === 'direct' ? '既読' : `既読 ${readCount}`));
+            }
+            row.append(bubble);
+        } else {
+            const avatar = element('div', 'chat-avatar');
+            setAvatar(avatar, message.senderName, message.senderIconUrl);
+            const wrapper = element('div', 'bubble-wrapper');
+            wrapper.append(element('span', 'user-name-label', message.senderName), bubble);
+            row.append(avatar, wrapper);
+            markRead(roomId, feed, message);
+        }
+        status.append(element('span', 'time', `${time.getHours()}:${String(time.getMinutes()).padStart(2, '0')}`));
+        row.append(status);
+        history.append(row);
+    }
+    chatLog.replaceChildren(history);
+    chatLog.scrollTop = atBottom ? chatLog.scrollHeight : scrollTop;
+    renderAnnouncement();
+}
+
+onAuthStateChanged(auth, async user => {
+    if (joining) return;
+    if (currentUserId && currentUserId !== user?.uid) leaveApp();
+    if (user?.isAnonymous) {
+        authBtn.disabled = true;
+        try {
+            const profile = await getDocFromServer(doc(db, 'members', user.uid));
+            if (profile.exists() && auth.currentUser?.uid === user.uid) enterApp(user.uid, profile.data());
+        } catch (error) {
+            if (error.code !== 'permission-denied') authError.textContent = '登録を確認できませんでした。';
+        }
+    }
+    if (!joining) authBtn.disabled = false;
+});

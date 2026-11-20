@@ -64,6 +64,7 @@ body {
     font-weight: bold;
     font-size: 1.1rem;
 }
+#memberMainTitle { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 .back-btn {
     background-color: #4b5563;
@@ -75,7 +76,15 @@ body {
     cursor: pointer;
 }
 .menu-btn { background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer; }
-.logout-btn { background: none; border: none; color: #ff9a9e; font-size: 0.8rem; cursor: pointer; }
+#chatTitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    margin: 0 10px;
+}
+#chatTitle img { width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; object-fit: cover; }
+#chatTitle span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* タブバー（LINE風の画面下部切り替え） */
 .tab-bar {
@@ -86,6 +95,8 @@ body {
 }
 .tab-item {
     flex: 1;
+    border: 0;
+    background: transparent;
     text-align: center;
     padding: 12px 0;
     font-size: 0.85rem;
@@ -106,8 +117,12 @@ body {
 .list-item {
     display: flex;
     align-items: center;
+    width: 100%;
     padding: 15px;
+    border: 0;
     border-bottom: 1px solid #f3f4f6;
+    background: #ffffff;
+    text-align: left;
     cursor: pointer;
 }
 .list-item:active { background-color: #f9fafb; }
@@ -131,16 +146,17 @@ body {
 .item-sub { font-size: 0.8rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .room-badge { background-color: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; padding: 2px 7px; border-radius: 10px; margin-left: 10px; }
 
-/* --- ログイン画面のスタイル --- */
+/* 参加画面 */
 #authScreen {
     background-color: #273246;
-    justify-content: center;
     align-items: center;
     padding: 30px;
     color: white;
+    overflow-y: auto;
 }
 .auth-box {
     width: 100%;
+    margin: auto 0;
     display: flex;
     flex-direction: column;
     gap: 15px;
@@ -165,13 +181,10 @@ body {
     cursor: pointer;
     margin-top: 5px;
 }
-.auth-toggle {
-    text-align: center;
-    font-size: 0.85rem;
-    color: #cbd5e1;
-    cursor: pointer;
-    text-decoration: underline;
-}
+.auth-input:focus-visible { outline: 2px solid #a1c4fd; outline-offset: 2px; }
+.auth-btn:disabled { opacity: 0.65; cursor: wait; }
+.auth-error { color: #fecaca; font-size: 0.9rem; text-align: center; }
+.auth-error:empty { margin-top: -15px; }
 
 /* --- トークルーム画面のスタイル --- */
 #roomScreen { background-color: #7494c0; }
@@ -229,64 +242,17 @@ body {
 }
 .image-send-label { cursor: pointer; padding: 5px; font-size: 1.3rem; color: #666; }
 #imageInput { display: none; }
-.chat-input { flex: 1; border: 1px solid #ccc; background-color: #ffffff; padding: 8px 14px; border-radius: 20px; font-size: 0.95rem; outline: none; }
+.chat-input { flex: 1; min-width: 0; border: 1px solid #ccc; background-color: #ffffff; padding: 8px 14px; border-radius: 20px; font-size: 0.95rem; outline: none; }
 .send-btn { background-color: #53b63e; color: white; border: none; padding: 7px 14px; border-radius: 20px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
 
 /* 部屋作成フォーム */
 .create-room-box { padding: 10px 15px; display: flex; gap: 5px; background-color: #f3f4f6; border-bottom: 1px solid #e5e7eb; }
-.room-create-input { flex: 1; padding: 6px 12px; border-radius: 20px; border: 1px solid #ccc; font-size: 0.85rem; outline: none; }
 .room-create-btn { background-color: #10b981; color: white; border: none; padding: 6px 15px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
 
-/* --- Googleログイン追加のスタイル --- */
-.auth-divider {
-    display: flex;
-    align-items: center;
-    text-align: center;
-    color: #cbd5e1;
-    font-size: 0.8rem;
-    margin: 8px 0;
-}
-.auth-divider::before,
-.auth-divider::after {
-    content: '';
-    flex: 1;
-    border-bottom: 1px solid #4b5563;
-}
-.auth-divider:not(:empty)::before {
-    margin-right: .5em;
-}
-.auth-divider:not(:empty)::after {
-    margin-left: .5em;
-}
-
-.google-btn {
-    background-color: #ffffff;
-    color: #1f2937;
-    border: none;
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: bold;
-    cursor: pointer;
-    margin-top: 5px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    transition: background-color 0.2s, transform 0.1s;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-.google-btn:hover {
-    background-color: #f3f4f6;
-}
-.google-btn:active {
-    transform: scale(0.98);
-}
-.google-icon {
-    width: 18px;
-    height: 18px;
-    display: block;
-}
+.group-members { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; min-width: 0; }
+.group-members legend { padding: 0 4px; font-size: 0.85rem; font-weight: bold; }
+#createRoomMembers { max-height: 130px; overflow-y: auto; }
+.group-member-option { display: flex; align-items: center; gap: 8px; padding: 5px 0; overflow-wrap: anywhere; }
 
 /* 自分カードのスタイル */
 .my-profile-card {
@@ -337,18 +303,22 @@ body {
     align-items: center;
     z-index: 1000;
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
     transition: opacity 0.3s ease;
     border-radius: inherit; /* 親要素であるチャット画面の角丸を引き継ぐ */
 }
 .modal.active {
     opacity: 1;
+    visibility: visible;
     pointer-events: auto;
 }
 .modal-content {
     background-color: white;
     width: 85%;
     max-width: 400px;
+    max-height: calc(100% - 24px);
+    overflow-y: auto;
     padding: 25px;
     border-radius: 16px;
     box-shadow: 0 10px 25px rgba(0,0,0,0.3);
@@ -456,10 +426,12 @@ body {
     background-color: #ffffff;
     z-index: 100;
     box-shadow: -5px 0 20px rgba(0,0,0,0.15);
-    transition: right 0.3s ease;
+    visibility: hidden;
+    transition: right 0.3s ease, visibility 0.3s;
 }
 .drawer.active {
     right: 0;
+    visibility: visible;
 }
 .drawer-content {
     display: flex;
@@ -628,6 +600,7 @@ body {
 .notification-banner {
     position: absolute;
     top: -85px; /* 初期位置は枠外に隠す */
+    visibility: hidden;
     left: 12px;
     right: 12px;
     background-color: rgba(39, 50, 70, 0.96); /* 高級感のある深い紺色の半透明 */
@@ -646,6 +619,7 @@ body {
 }
 .notification-banner.active {
     top: 15px; /* チャット画面の内側に美しくスライドイン */
+    visibility: visible;
 }
 .notification-icon {
     width: 38px;
@@ -919,3 +893,53 @@ body {
 .bubble:active {
     opacity: 0.85;
 }
+
+html, body {
+    overflow-x: hidden;
+}
+.auth-label { color: #e5e7eb; font-size: 0.9rem; }
+.auth-colors {
+    border: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+.auth-colors legend { margin-bottom: 8px; }
+.color-card {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+}
+.color-card input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.color-card:has(input:checked) {
+    outline: 3px solid #53b63e;
+    outline-offset: 3px;
+}
+.color-card:has(input:checked)::after {
+    content: '✓';
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #53b63e;
+    color: #fff;
+    font-size: 14px;
+    font-weight: bold;
+    display: grid;
+    place-items: center;
+}
+.color-card:has(input:focus-visible) { outline: 3px solid #a1c4fd; outline-offset: 3px; }
