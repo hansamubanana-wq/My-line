@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-line-v12';
+const CACHE_NAME = 'my-line-v13';
 const STICKER_PATH = new URL('./stickers/', self.registration.scope).pathname;
 const ASSETS = [
   './',

@@ -332,8 +332,11 @@ button:disabled { cursor: default; }
 }
 .reply-quote-user { color: var(--text); font-weight: 500; }
 .sticker-bubble > .sticker { font-size: 32px; line-height: 1.15; }
+.bubble-wrapper:has(.image-sticker-bubble) { max-width: none; }
 .image-sticker-bubble, .message.sent .image-sticker-bubble {
+    flex: none;
     width: var(--sticker-size);
+    max-width: none;
     padding: 0;
     border: 0;
     border-radius: 0;
@@ -403,15 +406,14 @@ input::placeholder { color: var(--muted); }
 }
 .sticker-picker.active { bottom: var(--footer-height); visibility: visible; }
 .sticker-item {
-    display: grid;
-    aspect-ratio: 1;
+    display: block;
     min-width: 0;
-    min-height: 0;
+    padding: 0;
     border: 0;
     border-radius: 8px;
     background: none;
 }
-.sticker-item img { width: 100%; height: 100%; object-fit: contain; }
+.sticker-item img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
 .sticker-item:hover { background: var(--background); }
 .sticker-item:active { opacity: 0.85; }
 
