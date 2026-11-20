@@ -135,11 +135,9 @@ async function savePushToken(uid) {
     if (uid !== currentUserId) return;
 
     const ref = doc(db, 'pushTokens', uid);
-    await runTransaction(db, async transaction => {
-        const snapshot = await transaction.get(ref);
-        const tokens = [...new Set(snapshot.data()?.tokens || [])].filter(value => value !== token);
-        transaction.set(ref, { tokens: [...tokens, token].slice(-10), updatedAt: serverTimestamp() });
-    });
+    // 匿名ログインの uid は端末（ブラウザー）ごとなので、最新のトークン1つだけを残す。
+    // 古いトークンが残ると同じ端末に通知が重複して届く。
+    await setDoc(ref, { tokens: [token], updatedAt: serverTimestamp() });
 }
 
 function registerPushForCurrentUser(permission) {
