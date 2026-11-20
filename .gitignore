@@ -1,3 +1,4 @@
 firestore.rules.local
 mock/
 node_modules/
+stickers/proto/

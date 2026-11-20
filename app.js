@@ -668,6 +668,7 @@ function roomDetails(roomId, useLocalName = true) {
 function messageSummary(message) {
     if (message.type === 'image') return '[画像]';
     if (message.type === 'unsent') return '送信を取り消しました';
+    if (message.type === 'sticker') return STICKERS.get(message.text) ?? message.text;
     return message.text;
 }
 
@@ -778,7 +779,7 @@ function showInAppNotification(roomId, message) {
     const title = rooms.get(roomId).kind === 'group'
         ? `${roomDetails(roomId).name} - ${message.senderName}`
         : message.senderName;
-    const body = messageSummary(message);
+    const body = message.type === 'sticker' ? listMessagePreview(message) : messageSummary(message);
     notificationTitle.textContent = title;
     notificationText.textContent = body;
     notificationBanner.classList.add('active');
@@ -862,16 +863,31 @@ byId('drawerRoomNameSaveBtn').addEventListener('click', () => {
     renderRoomList();
 });
 
-const STICKERS = ['🐱', '🐶', '🐰', '🦊', '🐻', '🐼', '🐨', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦'];
-for (const sticker of STICKERS) {
-    const button = element('button', 'sticker-item', sticker);
-    button.addEventListener('click', () => {
-        stickerPicker.classList.remove('active');
-        sendMessage('sticker', sticker);
-    });
-    stickerPicker.append(button);
-}
-byId('stickerBtn').addEventListener('click', () => stickerPicker.classList.toggle('active'));
+const STICKERS = new Map([
+    ['67', '67'], ['ryokai', '了解'], ['arigato', 'ありがと'], ['gomen', 'ごめん'],
+    ['kusa', '草'], ['sorena', 'それな'], ['ha', 'は？'], ['matte', '待って'],
+    ['otsu', 'おつ'], ['tensai', '天才'], ['kami', '神'], ['muri', '無理'],
+    ['imadoko', '今どこ？'], ['chikoku', '遅刻する'], ['test', 'テストやばい'],
+    ['nemui', 'ねむい'], ['oyasumi', 'おやすみ']
+]);
+
+const stickerUrl = id => `./stickers/${id}.webp`;
+
+byId('stickerBtn').addEventListener('click', () => {
+    if (!stickerPicker.childElementCount) {
+        for (const [id, label] of STICKERS) {
+            const button = element('button', 'sticker-item');
+            button.type = 'button';
+            appendImage(button, stickerUrl(id), label);
+            button.addEventListener('click', () => {
+                stickerPicker.classList.remove('active');
+                sendMessage('sticker', id);
+            });
+            stickerPicker.append(button);
+        }
+    }
+    stickerPicker.classList.toggle('active');
+});
 
 async function notifyRecipients(user, roomId, messageId) {
     const idToken = await user.getIdToken();
@@ -1065,7 +1081,10 @@ function renderChat() {
             continue;
         }
         row.classList.add(isMe ? 'sent' : 'received');
-        const bubble = element('div', message.type === 'sticker' ? 'bubble sticker-bubble' : 'bubble');
+        const isSticker = message.type === 'sticker';
+        const stickerLabel = isSticker ? STICKERS.get(message.text) : undefined;
+        const bubble = element('div', isSticker ? 'bubble sticker-bubble' : 'bubble');
+        if (stickerLabel) bubble.classList.add('image-sticker-bubble');
         if (message.replyTo) {
             const quoted = feed.byId.get(message.replyTo);
             if (quoted) {
@@ -1081,8 +1100,14 @@ function renderChat() {
         }
         if (message.type === 'image') {
             appendImage(bubble, message.imageUrl, '画像').className = 'sent-image';
+        } else if (stickerLabel) {
+            const image = element('img', 'sent-sticker');
+            image.alt = stickerLabel;
+            image.addEventListener('load', () => image.classList.add('loaded'), { once: true });
+            image.src = stickerUrl(message.text);
+            bubble.append(image);
         } else {
-            bubble.append(element('span', message.type === 'sticker' ? 'sticker' : '', message.text));
+            bubble.append(element('span', isSticker ? 'sticker' : '', message.text));
         }
         bubble.addEventListener('click', () => openMessageActions(message));
         const status = element('div', 'status-area');

@@ -1,4 +1,5 @@
-const CACHE_NAME = 'my-line-v10';
+const CACHE_NAME = 'my-line-v12';
+const STICKER_PATH = new URL('./stickers/', self.registration.scope).pathname;
 const ASSETS = [
   './',
   './index.html',
@@ -38,7 +39,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
   const isAppAsset = ASSETS.some(asset => new URL(asset, self.registration.scope).href === e.request.url);
-  if (!isAppAsset && e.request.mode !== 'navigate') {
+  const isSticker = url.pathname.startsWith(STICKER_PATH) && /^[^/]+\.webp$/.test(url.pathname.slice(STICKER_PATH.length));
+  if (!isAppAsset && !isSticker && e.request.mode !== 'navigate') {
     return;
   }
 
@@ -46,7 +48,7 @@ self.addEventListener('fetch', (e) => {
     fetch(e.request)
       .then(async (res) => {
         // 通信が成功したらキャッシュを更新
-        if (res.ok && isAppAsset) {
+        if (res.ok && (isAppAsset || isSticker)) {
           const cache = await caches.open(CACHE_NAME);
           await cache.put(e.request, res.clone()).catch(() => {});
         }

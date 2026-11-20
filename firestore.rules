@@ -157,7 +157,10 @@ service cloud.firestore {
         function validContent(data) {
           return data.text is string && data.imageUrl is string &&
             ((data.type == 'text' && data.text.size() > 0 && data.text.size() <= 2000 && data.imageUrl == '') ||
-             (data.type == 'sticker' && data.text in ['🐱', '🐶', '🐰', '🦊', '🐻', '🐼', '🐨', '🦁',
+             (data.type == 'sticker' && data.text in [
+                '67', 'ryokai', 'arigato', 'gomen', 'kusa', 'sorena', 'ha', 'matte', 'otsu',
+                'tensai', 'kami', 'muri', 'imadoko', 'chikoku', 'test', 'nemui', 'oyasumi',
+                '🐱', '🐶', '🐰', '🦊', '🐻', '🐼', '🐨', '🦁',
                 '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦'] && data.imageUrl == '') ||
              (data.type == 'image' && data.text == '' && validImage(data.imageUrl)));
         }
