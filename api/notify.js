@@ -5,6 +5,7 @@ import { getMessaging } from 'firebase-admin/messaging';
 
 const maxRequestBytes = 1024;
 const maxMessageAge = 2 * 60 * 1000;
+const maxPresenceAge = 45 * 1000;
 const roomIdPattern = /^(?:group_[A-Za-z0-9]{20}|[A-Za-z0-9]{1,128}_[A-Za-z0-9]{1,128})$/;
 const messageIdPattern = /^[A-Za-z0-9]{20}$/;
 const uidPattern = /^[A-Za-z0-9]{1,128}$/;
@@ -66,7 +67,20 @@ function isInvalidToken(error) {
 }
 
 async function sendNotifications(app, db, recipients, data) {
-    const snapshots = await db.getAll(...recipients.map(uid => db.collection('pushTokens').doc(uid)));
+    const backgroundRecipients = (await Promise.all(recipients.map(async uid => {
+        try {
+            const activeAt = (await db.collection('presence').doc(uid).get()).data()?.activeAt;
+            if (activeAt instanceof Timestamp && Math.abs(Date.now() - activeAt.toMillis()) <= maxPresenceAge) {
+                return null;
+            }
+        } catch {
+            // Send normally if this recipient's presence cannot be read.
+        }
+        return uid;
+    }))).filter(uid => uid !== null);
+    if (backgroundRecipients.length === 0) return true;
+
+    const snapshots = await db.getAll(...backgroundRecipients.map(uid => db.collection('pushTokens').doc(uid)));
     const tokensByDocument = new Map();
     const uniqueTokens = new Set();
     for (const snapshot of snapshots) {

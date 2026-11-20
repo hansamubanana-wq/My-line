@@ -39,11 +39,12 @@ HTML、CSS、JavaScript、Firebase Authentication（匿名認証）、Cloud Fire
 
 1. Firebase コンソールの **プロジェクトの設定 → Cloud Messaging → ウェブ構成 → ウェブプッシュ証明書** で鍵ペアを生成し、公開鍵を `app.js` の `VAPID_PUBLIC_KEY` に設定します。空欄またはプレースホルダーの間は通知設定が表示されません。
 2. 同じ Firebase プロジェクトの **プロジェクトの設定 → サービスアカウント → 新しい秘密鍵を生成** で取得した JSON の内容を、Vercel の **Settings → Environment Variables** で `FIREBASE_SERVICE_ACCOUNT` に設定します。鍵ファイルや秘密鍵の内容を Git に入れないでください。
-3. 参加用ハッシュを設定した本番用ルールに、`firestore.rules` の `pushTokens` と `notifySent` のルールを反映して公開します。
+3. 参加用ハッシュを設定した本番用ルールに、`firestore.rules` の `presence`、`pushTokens`、`notifySent` のルールを反映して公開します。
 4. Vercel のフレームワークプリセットは **Other**、配信先はリポジトリのルート、ビルドコマンドは空欄です。`api/notify.js` は Node.js Function として動作します。依存関係のインストールは有効にします。通知送信には Vercel の Function が動く HTTPS 環境が必要です。
 5. iOS・iPadOS 16.4 以降は、Safari からホーム画面に追加し、そのアイコンからアプリを開いて「通知をオンにする」を押します。Android・PC では対応ブラウザーで同じボタンを押します。
 
-開いているトークが前面にある間は、Service Worker がそのトークの通知表示を省きます。WebKit では通知を表示しないプッシュの扱いにより購読が解除される場合があります。 [WebKit の Web Push 仕様](https://webkit.org/blog/12945/meet-web-push/)
+参加済みのアプリは前面になった直後と20秒ごとに在席を更新し、背面に移ると在席を解除します。
+サーバーは在席時刻が45秒以内の受信者へのプッシュを省きます。前面では別のトークの新着だけを画面内の帯で知らせます。
 
 ## 運用
 

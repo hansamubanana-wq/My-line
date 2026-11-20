@@ -57,12 +57,14 @@ const actionUnsendBtn = byId('actionUnsendBtn');
 const groupDrawer = byId('groupDrawer');
 const maxJoinAttempts = 3;
 const joinLockDuration = 60 * 60 * 1000;
+const presenceInterval = 20 * 1000;
 
 let joining = false;
 let joinUnlockAt = 0;
 let joinUnlockTimer;
 let activeScreen = 'auth';
 let currentUserId = null;
+let presenceTimer;
 let currentRoomId = null;
 let members = new Map();
 let rooms = new Map();
@@ -273,9 +275,37 @@ window.addEventListener('resize', setScreenSize);
 window.addEventListener('orientationchange', setScreenSize);
 setScreenSize();
 
+function writePresence(uid, activeAt) {
+    void setDoc(doc(db, 'presence', uid), { activeAt }).catch(() => {});
+}
+
+function stopPresence() {
+    if (presenceTimer === undefined) return;
+    clearInterval(presenceTimer);
+    presenceTimer = undefined;
+    writePresence(currentUserId, Timestamp.fromMillis(0));
+}
+
+function syncPresence() {
+    if (document.visibilityState !== 'visible') {
+        stopPresence();
+        return;
+    }
+    const uid = currentUserId;
+    if (!uid || presenceTimer !== undefined) return;
+    const heartbeat = () => writePresence(uid, serverTimestamp());
+    heartbeat();
+    presenceTimer = setInterval(heartbeat, presenceInterval);
+}
+
+document.addEventListener('visibilitychange', syncPresence);
+window.addEventListener('pagehide', stopPresence);
+window.addEventListener('pageshow', syncPresence);
+
 function enterApp(uid, profile) {
     if (currentUserId === uid) return;
     currentUserId = uid;
+    syncPresence();
     members.set(uid, profile);
     renderMyProfileAvatar();
     showScreen('list');
@@ -285,6 +315,7 @@ function enterApp(uid, profile) {
 }
 
 function leaveApp() {
+    stopPresence();
     closeRoom();
     unsubscribeMembers?.();
     unsubscribeRooms?.();

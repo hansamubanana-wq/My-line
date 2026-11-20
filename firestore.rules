@@ -91,6 +91,12 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
+    match /presence/{uid} {
+      allow read: if false;
+      allow create, update: if isOwner(uid) && hasExactKeys(request.resource.data, ['activeAt']) &&
+        (request.resource.data.activeAt == request.time || request.resource.data.activeAt == timestamp.value(0));
+    }
+
     match /pushTokens/{uid} {
       function validTokenAt(tokens, index) {
         return tokens.size() <= index || (tokens[index] is string && tokens[index].size() <= 4096);
