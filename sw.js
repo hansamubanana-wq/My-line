@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-line-v9';
+const CACHE_NAME = 'my-line-v10';
 const ASSETS = [
   './',
   './index.html',

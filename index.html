@@ -9,24 +9,42 @@
     <meta property="og:description" content="my-line">
     <meta property="og:type" content="website">
     <meta property="og:image" content="https://my-line-rho.vercel.app/icon.png">
-    <meta name="theme-color" content="#273246">
+    <meta name="theme-color" content="#f6f3ee">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon.png">
     <link rel="icon" type="image/png" href="icon.png">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='38' fill='%23273246'/%3E%3Cpath fill='%23a1c4fd' d='M48 50h96a12 12 0 0 1 12 12v53a12 12 0 0 1-12 12H82l-26 19v-19h-8a12 12 0 0 1-12-12V62a12 12 0 0 1 12-12Z'/%3E%3C/svg%3E">
     <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,600&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;display=swap">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <svg xmlns="http://www.w3.org/2000/svg" hidden>
+    <symbol id="icon-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.25"/><path d="M5.5 19v-1a4 4 0 0 1 4-4h5a4 4 0 0 1 4 4v1"/></symbol>
+    <symbol id="icon-group" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 19v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1m1-14a3 3 0 0 1 0 6m2 3a4 4 0 0 1 3 4v1"/></symbol>
+    <symbol id="icon-group-add" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><path d="M2 19v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1m4-13v8m-4-4h8"/></symbol>
+    <symbol id="icon-back" viewBox="0 0 24 24"><path d="m14 5-7 7 7 7"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="icon-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 14a4.5 4.5 0 0 0 8 0M9 9.5h.01m5.99 0h.01"/></symbol>
+    <symbol id="icon-send" viewBox="0 0 24 24"><path d="m21 3-7 18-3.5-7.5L3 10l18-7ZM21 3 10.5 13.5"/></symbol>
+    <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M12 5h.01m-.01 7h.01m-.01 7h.01"/></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="icon-announce" viewBox="0 0 24 24"><path d="M4 10v4h4l9 4V6l-9 4H4Zm4 4 2 5h3m7-9v4"/></symbol>
+    <symbol id="icon-reply" viewBox="0 0 24 24"><path d="m9 6-5 5 5 5m-5-5h10a6 6 0 0 1 6 6v1"/></symbol>
+  </svg>
 
 <div class="chat-container">
     
     <div id="authScreen" class="screen active">
         <form id="authForm" class="auth-box" autocomplete="off">
             <h2>my-line</h2>
-            <label class="auth-label" for="authSchool">通っている学校の名前（漢字）</label>
-            <input type="text" id="authSchool" class="auth-input" autocomplete="off" maxlength="40" required>
+            <div class="auth-field">
+                <label class="auth-label" for="authSchool">通っている学校の名前（漢字）</label>
+                <input type="text" id="authSchool" class="auth-input" autocomplete="off" maxlength="40" required>
+            </div>
             <fieldset id="authColors" class="auth-colors">
                 <legend class="auth-label">教室のカーテンの色（当てはまるものをすべて）</legend>
                 <label class="color-card" style="background:#ffffff"><input type="checkbox" value="白" aria-label="白"></label>
@@ -38,7 +56,10 @@
                 <label class="color-card" style="background:#f08a00"><input type="checkbox" value="オレンジ" aria-label="オレンジ"></label>
                 <label class="color-card" style="background:#7b4fb0"><input type="checkbox" value="紫" aria-label="紫"></label>
             </fieldset>
-            <input type="text" id="authName" class="auth-input" aria-label="名前（必須）" placeholder="名前（必須）" maxlength="20" required>
+            <div class="auth-field">
+                <label class="auth-label" for="authName">名前（必須）</label>
+                <input type="text" id="authName" class="auth-input" maxlength="20" required>
+            </div>
             <button type="submit" id="authBtn" class="auth-btn" disabled>参加する</button>
             <p id="authError" class="auth-error" role="alert"></p>
         </form>
@@ -46,16 +67,16 @@
 
     <div id="listScreen" class="screen" inert>
         <div class="header">
-            <div class="header-top talk-list-header">
+            <div class="header-top">
                 <button type="button" id="profileSettingsBtn" class="item-icon profile-settings-btn" aria-label="プロフィール設定"></button>
                 <h1 class="title">トーク</h1>
-                <button type="button" id="saveRoomBtn" class="room-create-btn">グループ作成</button>
+                <button type="button" id="saveRoomBtn" class="room-create-btn icon-button" aria-label="グループ作成"><svg class="icon" aria-hidden="true"><use href="#icon-group-add"/></svg></button>
             </div>
         </div>
         <div id="pushPrompt" class="push-prompt" hidden>
             <button type="button" id="pushPromptEnable" class="push-enable">通知をオンにする</button>
             <span id="pushPromptHint" hidden></span>
-            <button type="button" id="pushPromptClose" class="push-prompt-close" aria-label="通知の案内を閉じる">×</button>
+            <button type="button" id="pushPromptClose" class="push-prompt-close icon-button" aria-label="通知の案内を閉じる"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
         </div>
         <div class="list-content" id="roomList"></div>
     </div>
@@ -63,52 +84,54 @@
     <div id="roomScreen" class="screen" inert>
         <div class="header">
             <div class="header-top">
-                <button id="backBtn" class="back-btn">◀ 戻る</button>
+                <button id="backBtn" class="back-btn"><svg class="icon" aria-hidden="true"><use href="#icon-back"/></svg>戻る</button>
                 <div class="title" id="chatTitle">グループチャット</div>
-                <button id="menuBtn" class="menu-btn">︙</button>
+                <button type="button" id="menuBtn" class="menu-btn icon-button" aria-label="トーク設定"><svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg></button>
             </div>
         </div>
         <!-- アナウンス（ピン留め）バー -->
         <div id="announcementBar" class="announcement-bar">
-            <span class="announcement-icon">📢</span>
+            <span class="announcement-icon"><svg class="icon" aria-hidden="true"><use href="#icon-announce"/></svg></span>
             <span id="announcementText" class="announcement-text">アナウンスはまだありません</span>
-            <button id="closeAnnounceBtn" class="close-announce-btn">×</button>
+            <button type="button" id="closeAnnounceBtn" class="close-announce-btn icon-button" aria-label="アナウンスを閉じる"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
         </div>
         <div class="chat-log" id="chatLog"></div>
         <!-- リプライプレビュー -->
         <div id="replyPreviewBox" class="reply-preview-box">
             <span id="replyPreviewText">〇〇さんへのリプライ</span>
-            <button id="cancelReplyBtn" class="cancel-reply-btn">×</button>
+            <button type="button" id="cancelReplyBtn" class="cancel-reply-btn icon-button" aria-label="返信をキャンセル"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
         </div>
         <div class="chat-footer">
-            <label for="imageInput" class="image-send-label">📎</label>
-            <input type="file" id="imageInput" accept="image/*">
-            <button id="stickerBtn" class="sticker-toggle-btn">😊</button>
-            <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力" aria-label="メッセージ" maxlength="2000">
-            <button id="sendBtn" class="send-btn">送信</button>
+            <label for="imageInput" class="image-send-label icon-button"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg></label>
+            <input type="file" id="imageInput" aria-label="画像を選ぶ" accept="image/*">
+            <button type="button" id="stickerBtn" class="sticker-toggle-btn icon-button" aria-label="スタンプを選ぶ"><svg class="icon" aria-hidden="true"><use href="#icon-smile"/></svg></button>
+            <input type="text" id="chatInput" class="chat-input" placeholder="メッセージ" aria-label="メッセージ" maxlength="2000">
+            <button id="sendBtn" class="send-btn icon-button"><svg class="icon" aria-hidden="true"><use href="#icon-send"/></svg><span id="sendLabel" class="send-label">送信</span></button>
         </div>
         <!-- スタンプ選択パネル -->
         <div id="stickerPicker" class="sticker-picker"></div>
 
         <!-- グループメニュー（ドロワー） -->
-        <div id="groupDrawer" class="drawer">
-            <div class="drawer-content">
-                <div class="drawer-header">
-                    <h3>トーク設定</h3>
-                    <button id="closeDrawerBtn" class="close-drawer-btn">×</button>
-                </div>
-                <div class="drawer-body">
-                    <div class="drawer-section">
-                        <label>トークルーム名</label>
-                        <div class="room-name-edit-box">
-                            <input type="text" id="drawerRoomNameInput" maxlength="40">
-                            <button id="drawerRoomNameSaveBtn">変更</button>
-                        </div>
+        <div class="drawer-viewport">
+            <div id="groupDrawer" class="drawer">
+                <div class="drawer-content">
+                    <div class="drawer-header">
+                        <h3>トーク設定</h3>
+                        <button type="button" id="closeDrawerBtn" class="close-drawer-btn icon-button" aria-label="トーク設定を閉じる"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
                     </div>
-                    <div class="drawer-section">
-                        <label id="drawerMemberCount">メンバー (0)</label>
-                        <div id="drawerMemberList" class="drawer-member-list">
-                            <!-- メンバーがグリッド表示される -->
+                    <div class="drawer-body">
+                        <div class="drawer-section">
+                            <label>トークルーム名</label>
+                            <div class="room-name-edit-box">
+                                <input type="text" id="drawerRoomNameInput" maxlength="40">
+                                <button id="drawerRoomNameSaveBtn">変更</button>
+                            </div>
+                        </div>
+                        <div class="drawer-section">
+                            <label id="drawerMemberCount">メンバー (0)</label>
+                            <div id="drawerMemberList" class="drawer-member-list">
+                                <!-- メンバーがグリッド表示される -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -121,7 +144,7 @@
         <div class="modal-content">
             <h3>プロフィール設定</h3>
             <div class="profile-avatar-container">
-                <div id="profileModalIcon" class="profile-avatar-preview">👤</div>
+                <div id="profileModalIcon" class="profile-avatar-preview"><svg class="icon" aria-hidden="true"><use href="#icon-person"/></svg></div>
                 <label for="profileIconInput" class="avatar-upload-btn">画像をアップロード</label>
                 <input type="file" id="profileIconInput" accept="image/*" style="display:none;">
             </div>
@@ -153,7 +176,7 @@
         <div class="modal-content">
             <h3>グループ作成</h3>
             <div class="profile-avatar-container">
-                <div id="createRoomModalIcon" class="profile-avatar-preview">👥</div>
+                <div id="createRoomModalIcon" class="profile-avatar-preview avatar-group"><svg class="icon" aria-hidden="true"><use href="#icon-group"/></svg></div>
                 <label for="createRoomIconInput" class="avatar-upload-btn">アイコンを選択</label>
                 <input type="file" id="createRoomIconInput" accept="image/*" style="display:none;">
             </div>
@@ -174,11 +197,11 @@
 
     <!-- メッセージ操作メニュー（モーダル） -->
     <div id="messageActionModal" class="modal">
-        <div class="modal-content" style="max-width: 300px; gap: 12px; text-align: center;">
-            <h4 id="actionModalHeader" style="margin-bottom: 5px; color: #1f2937;">メッセージ操作</h4>
-            <button id="actionReplyBtn" class="modal-btn save" style="background-color: #3b82f6;">↩ 返信 (リプライ)</button>
-            <button id="actionAnnounceBtn" class="modal-btn save" style="background-color: #f59e0b;">📢 アナウンスに設定</button>
-            <button id="actionUnsendBtn" class="modal-btn save" style="background-color: #ef4444; display: none;">✖ 送信取り消し</button>
+        <div class="modal-content message-actions">
+            <h4 id="actionModalHeader">メッセージ操作</h4>
+            <button id="actionReplyBtn" class="modal-btn save"><svg class="icon" aria-hidden="true"><use href="#icon-reply"/></svg>返信 (リプライ)</button>
+            <button id="actionAnnounceBtn" class="modal-btn save"><svg class="icon" aria-hidden="true"><use href="#icon-announce"/></svg>アナウンスに設定</button>
+            <button id="actionUnsendBtn" class="modal-btn danger" style="display: none;"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>送信取り消し</button>
             <button id="actionCloseBtn" class="modal-btn cancel">閉じる</button>
         </div>
     </div>

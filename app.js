@@ -222,16 +222,29 @@ function appendImage(container, url, alt) {
     return image;
 }
 
-function setAvatar(container, name, url) {
-    container.textContent = url ? '' : Array.from(name).slice(0, 2).join('');
-    if (url) appendImage(container, url, 'アバター');
+function lineIcon(name) {
+    const svgNamespace = 'http://www.w3.org/2000/svg';
+    const icon = document.createElementNS(svgNamespace, 'svg');
+    const use = document.createElementNS(svgNamespace, 'use');
+    icon.classList.add('icon');
+    icon.setAttribute('aria-hidden', 'true');
+    use.setAttribute('href', `#icon-${name}`);
+    icon.append(use);
+    return icon;
 }
 
-function listItem(name, iconUrl, detail, onClick) {
+function setAvatar(container, url, isGroup = false) {
+    container.replaceChildren();
+    container.classList.toggle('avatar-group', isGroup);
+    if (url) appendImage(container, url, 'アバター');
+    else container.append(lineIcon(isGroup ? 'group' : 'person'));
+}
+
+function listItem(name, iconUrl, detail, onClick, isGroup = false) {
     const item = element('button', 'list-item');
     item.type = 'button';
     const icon = element('span', 'item-icon');
-    setAvatar(icon, name, iconUrl);
+    setAvatar(icon, iconUrl, isGroup);
     const info = element('span', 'item-info');
     info.append(element('span', 'item-name', name));
     if (detail) info.append(element('span', 'item-sub', detail));
@@ -429,7 +442,7 @@ function openProfileModal() {
     profileModalName.value = profile.name;
     profileModalStatus.value = profile.status;
     profileIconUrl = profile.iconUrl;
-    setAvatar(profileModalIcon, profile.name, profileIconUrl);
+    setAvatar(profileModalIcon, profileIconUrl);
     renderPushSettings();
     profileModal.classList.add('active');
 }
@@ -440,7 +453,7 @@ byId('profileIconInput').addEventListener('change', async event => {
     profileSaveBtn.disabled = true;
     try {
         profileIconUrl = await compressImage(file, 150, 0.8);
-        setAvatar(profileModalIcon, profileModalName.value || '自分', profileIconUrl);
+        setAvatar(profileModalIcon, profileIconUrl);
     } catch {
         alert('画像の読み込みに失敗しました。');
     } finally {
@@ -474,7 +487,7 @@ profileSettingsBtn.addEventListener('click', openProfileModal);
 
 function renderMyProfileAvatar() {
     const profile = members.get(currentUserId);
-    setAvatar(profileSettingsBtn, profile.name, profile.iconUrl);
+    setAvatar(profileSettingsBtn, profile.iconUrl);
 }
 
 function friends() {
@@ -523,7 +536,7 @@ function renderGroupMemberOptions() {
 
 byId('saveRoomBtn').addEventListener('click', () => {
     createRoomModalName.value = '';
-    createRoomModalIcon.textContent = '👥';
+    setAvatar(createRoomModalIcon, '', true);
     roomIconUrl = '';
     createRoomMembers.replaceChildren();
     renderGroupMemberOptions();
@@ -537,7 +550,7 @@ byId('createRoomIconInput').addEventListener('change', async event => {
     createRoomModalBtn.disabled = true;
     try {
         roomIconUrl = await compressImage(file, 150, 0.8);
-        setAvatar(createRoomModalIcon, '👥', roomIconUrl);
+        setAvatar(createRoomModalIcon, roomIconUrl, true);
     } catch {
         alert('画像の読み込みに失敗しました。');
     } finally {
@@ -693,7 +706,7 @@ function renderRoomList() {
         if (peerId) shownPeers.add(peerId);
 
         const { name, iconUrl } = roomDetails(id, !peerId);
-        const item = listItem(name, iconUrl, listMessagePreview(latest), () => openRoom(id));
+        const item = listItem(name, iconUrl, listMessagePreview(latest), () => openRoom(id), rooms.get(id).kind === 'group');
         item.dataset.roomId = id;
 
         const date = latest.timestamp.toDate();
@@ -741,7 +754,10 @@ const notificationIcon = element('div', 'notification-icon');
 const notificationTitle = element('div', 'notification-title');
 const notificationText = element('div', 'notification-text');
 const notificationInfo = element('div', 'notification-info');
-const notificationClose = element('button', 'notification-close', '×');
+const notificationClose = element('button', 'notification-close icon-button');
+notificationClose.type = 'button';
+notificationClose.setAttribute('aria-label', '通知を閉じる');
+notificationClose.append(lineIcon('close'));
 notificationInfo.append(notificationTitle, notificationText);
 notificationBanner.append(notificationIcon, notificationInfo, notificationClose);
 document.querySelector('.chat-container').append(notificationBanner);
@@ -758,7 +774,7 @@ notificationClose.addEventListener('click', event => {
 
 function showInAppNotification(roomId, message) {
     notificationRoomId = roomId;
-    setAvatar(notificationIcon, message.senderName, message.senderIconUrl);
+    setAvatar(notificationIcon, message.senderIconUrl);
     const title = rooms.get(roomId).kind === 'group'
         ? `${roomDetails(roomId).name} - ${message.senderName}`
         : message.senderName;
@@ -772,9 +788,10 @@ function showInAppNotification(roomId, message) {
 
 function renderRoomTitle() {
     const { name, iconUrl } = roomDetails(currentRoomId);
-    chatTitle.replaceChildren();
-    if (iconUrl) appendImage(chatTitle, iconUrl, '');
-    chatTitle.append(element('span', '', name));
+    const avatar = element('span', 'item-icon');
+    setAvatar(avatar, iconUrl, rooms.get(currentRoomId).kind === 'group');
+    avatar.setAttribute('aria-hidden', 'true');
+    chatTitle.replaceChildren(avatar, element('span', 'chat-title-text', name));
 }
 
 function closeRoom() {
@@ -824,7 +841,7 @@ function renderDrawerMembers() {
         const name = profile?.name || 'メンバー';
         const item = element('div', 'drawer-member-item');
         const icon = element('div', 'drawer-member-icon');
-        setAvatar(icon, name, profile?.iconUrl);
+        setAvatar(icon, profile?.iconUrl);
         item.append(icon, element('div', 'drawer-member-name', name));
         participants.append(item);
     }
@@ -907,7 +924,8 @@ imageInput.addEventListener('change', async event => {
     const roomId = currentRoomId;
     const uid = currentUserId;
     sendBtn.disabled = true;
-    sendBtn.textContent = '送信中';
+    sendBtn.classList.add('uploading');
+    byId('sendLabel').textContent = '送信中';
     let imageUrl = '';
     try {
         try {
@@ -928,7 +946,8 @@ imageInput.addEventListener('change', async event => {
         alert('画像の読み込みに失敗しました。');
     } finally {
         sendBtn.disabled = false;
-        sendBtn.textContent = '送信';
+        sendBtn.classList.remove('uploading');
+        byId('sendLabel').textContent = '送信';
     }
     if (imageUrl && roomId === currentRoomId && uid === currentUserId) sendMessage('image', '', imageUrl);
 });
@@ -944,8 +963,9 @@ function scrollToMessage(id) {
     target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     const bubble = target?.querySelector('.bubble');
     if (bubble) {
-        const backgroundColor = getComputedStyle(bubble).backgroundColor;
-        bubble.animate([{ backgroundColor: '#fef08a', offset: 0 }, { backgroundColor: '#fef08a', offset: 0.8 }, { backgroundColor }], 1500);
+        const style = getComputedStyle(bubble);
+        const highlight = style.getPropertyValue('--yellow').trim();
+        bubble.animate([{ backgroundColor: highlight, offset: 0 }, { backgroundColor: highlight, offset: 0.8 }, { backgroundColor: style.backgroundColor }], 1500);
     }
 }
 
@@ -1025,7 +1045,16 @@ function renderChat() {
     const atBottom = chatLog.scrollHeight - chatLog.clientHeight - chatLog.scrollTop < 24;
     const scrollTop = chatLog.scrollTop;
     const history = document.createDocumentFragment();
+    let previousDate;
     for (const message of feed.messages) {
+        const time = message.timestamp.toDate();
+        const date = time.toDateString();
+        if (date !== previousDate) {
+            const label = time.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
+                .replace('(', '（').replace(')', '）');
+            history.append(element('div', 'message-date', label));
+            previousDate = date;
+        }
         const isMe = message.senderId === currentUserId;
         const row = element('div', 'message');
         row.id = `msg_${message.id}`;
@@ -1053,10 +1082,9 @@ function renderChat() {
         if (message.type === 'image') {
             appendImage(bubble, message.imageUrl, '画像').className = 'sent-image';
         } else {
-            bubble.append(element('span', '', message.text));
+            bubble.append(element('span', message.type === 'sticker' ? 'sticker' : '', message.text));
         }
         bubble.addEventListener('click', () => openMessageActions(message));
-        const time = message.timestamp.toDate();
         const status = element('div', 'status-area');
         if (isMe) {
             const readCount = message.readUsers.length - 1;
@@ -1066,7 +1094,7 @@ function renderChat() {
             row.append(bubble);
         } else {
             const avatar = element('div', 'chat-avatar');
-            setAvatar(avatar, message.senderName, message.senderIconUrl);
+            setAvatar(avatar, message.senderIconUrl);
             const wrapper = element('div', 'bubble-wrapper');
             wrapper.append(element('span', 'user-name-label', message.senderName), bubble);
             row.append(avatar, wrapper);
