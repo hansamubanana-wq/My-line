@@ -19,14 +19,14 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 const byId = id => document.getElementById(id);
-const screens = { auth: byId('authScreen'), member: byId('memberScreen'), list: byId('listScreen'), room: byId('roomScreen') };
+const screens = { auth: byId('authScreen'), list: byId('listScreen'), room: byId('roomScreen') };
 const wideLayout = window.matchMedia('(min-width: 768px)');
 const authSchool = byId('authSchool');
 const authColors = byId('authColors');
 const authName = byId('authName');
 const authBtn = byId('authBtn');
 const authError = byId('authError');
-const memberList = byId('memberList');
+const profileSettingsBtn = byId('profileSettingsBtn');
 const roomList = byId('roomList');
 const chatLog = byId('chatLog');
 const chatInput = byId('chatInput');
@@ -46,7 +46,6 @@ let joining = false;
 let joinUnlockAt = 0;
 let joinUnlockTimer;
 let activeScreen = 'auth';
-let leftScreen = 'member';
 let currentUserId = null;
 let currentRoomId = null;
 let members = new Map();
@@ -95,17 +94,13 @@ function listItem(name, iconUrl, detail, onClick) {
 
 function syncScreens() {
     for (const [name, screen] of Object.entries(screens)) {
-        const visible = name === activeScreen || (wideLayout.matches && activeScreen === 'room' && name === leftScreen);
+        const visible = name === activeScreen || (wideLayout.matches && activeScreen === 'room' && name === 'list');
         screen.classList.toggle('active', visible);
         screen.inert = !visible;
     }
 }
 
 function showScreen(key) {
-    if (key === 'member' || key === 'list') {
-        leftScreen = key;
-        if (currentRoomId) key = 'room';
-    }
     activeScreen = key;
     syncScreens();
 }
@@ -125,18 +120,12 @@ function requestNotificationPermission() {
     }
 }
 
-byId('tabTalk').addEventListener('click', () => {
-    showScreen('list');
-    requestNotificationPermission();
-});
-byId('tabMember2').addEventListener('click', () => showScreen('member'));
-
 function enterApp(uid, profile) {
     if (currentUserId === uid) return;
     currentUserId = uid;
     members.set(uid, profile);
-    renderMyProfileCard();
-    showScreen('member');
+    renderMyProfileAvatar();
+    showScreen('list');
     startMemberListListener(uid);
     startRoomsListener(uid);
 }
@@ -152,8 +141,7 @@ function leaveApp() {
     currentUserId = null;
     profileModal.classList.remove('active');
     createRoomModal.classList.remove('active');
-    memberList.replaceChildren();
-    renderRoomList();
+    roomList.replaceChildren();
     document.querySelector('.notification-banner')?.classList.remove('active');
     showScreen('auth');
 }
@@ -336,14 +324,11 @@ profileSaveBtn.addEventListener('click', async () => {
 });
 byId('profileCloseBtn').addEventListener('click', () => profileModal.classList.remove('active'));
 
-function renderMyProfileCard() {
+profileSettingsBtn.addEventListener('click', openProfileModal);
+
+function renderMyProfileAvatar() {
     const profile = members.get(currentUserId);
-    if (!profile) return;
-    byId('memberMainTitle').textContent = `友だち (${profile.name})`;
-    const card = listItem(profile.name, profile.iconUrl, profile.status && `💬 ${profile.status}`, openProfileModal);
-    card.classList.add('my-profile-card');
-    card.setAttribute('aria-label', `${profile.name}のプロフィール設定`);
-    byId('myProfileCardContainer').replaceChildren(card);
+    setAvatar(profileSettingsBtn, profile.name, profile.iconUrl);
 }
 
 function friends() {
@@ -359,30 +344,14 @@ function startMemberListListener(uid) {
             return;
         }
         members = updatedMembers;
-        renderMyProfileCard();
-        memberList.replaceChildren();
-        for (const [friendId, friend] of friends()) {
-            const item = listItem(friend.name, friend.iconUrl, friend.status && `💬 ${friend.status}`, async () => {
-                requestNotificationPermission();
-                item.disabled = true;
-                try {
-                    await openPrivateChat(friendId);
-                } catch {
-                    alert('トークを開けませんでした。');
-                } finally {
-                    item.disabled = false;
-                }
-            });
-            item.dataset.roomId = directRoomId(uid, friendId);
-            memberList.appendChild(item);
-        }
+        renderMyProfileAvatar();
         if (createRoomModal.classList.contains('active')) renderGroupMemberOptions();
         renderRoomList();
         if (currentRoomId) {
             renderRoomTitle();
             if (groupDrawer.classList.contains('active')) renderDrawerMembers();
         }
-    }, error => console.error('友だち一覧の取得に失敗しました。', error));
+    }, error => console.error('メンバー一覧の取得に失敗しました。', error));
 }
 
 const createRoomModal = byId('createRoomModal');
@@ -407,6 +376,7 @@ function renderGroupMemberOptions() {
 }
 
 byId('saveRoomBtn').addEventListener('click', () => {
+    requestNotificationPermission();
     createRoomModalName.value = '';
     createRoomModalIcon.textContent = '👥';
     roomIconUrl = '';
@@ -468,17 +438,16 @@ function directRoomId(uid, friendId) {
     return [uid, friendId].sort().join('_');
 }
 
-async function openPrivateChat(friendId) {
+async function openPrivateChat(friendId, roomId) {
     const uid = currentUserId;
     const participantIds = [uid, friendId].sort();
-    const roomId = directRoomId(uid, friendId);
     if (!rooms.has(roomId)) {
         const room = { kind: 'direct', members: participantIds };
         await setDoc(doc(db, 'rooms', roomId), room);
         if (uid !== currentUserId) return;
         if (!rooms.has(roomId)) rooms.set(roomId, room);
     }
-    if (screens.member.classList.contains('active')) openRoom(roomId);
+    openRoom(roomId);
 }
 
 function startRoomsListener(uid) {
@@ -523,10 +492,10 @@ function watchRoomMessages(roomId, notifyFirstUnread = false) {
     }, error => console.error('メッセージの取得に失敗しました。', error));
 }
 
-function roomDetails(roomId) {
+function roomDetails(roomId, useLocalName = true) {
     const room = rooms.get(roomId);
     const peer = room.kind === 'direct' ? members.get(room.members.find(uid => uid !== currentUserId)) : room;
-    const localName = localStorage.getItem(`room_name_${roomId}`);
+    const localName = useLocalName ? localStorage.getItem(`room_name_${roomId}`) : null;
     return { name: localName || peer?.name || '個人トーク', iconUrl: peer?.iconUrl || '' };
 }
 
@@ -536,35 +505,83 @@ function messageSummary(message) {
     return message.text;
 }
 
+function listMessagePreview(message) {
+    if (message.type === 'sticker') return 'スタンプ';
+    if (message.type === 'image') return '画像';
+    if (message.type === 'unsent') return 'メッセージの送信を取り消しました';
+    return message.text;
+}
+
+function listMessageTime(date, today) {
+    if (date.toDateString() === today) {
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${hours}:${minutes}`;
+    }
+    return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
 function renderRoomList() {
-    const entries = [...rooms.keys()].map(id => {
-        const messages = roomFeeds.get(id)?.messages || [];
-        const latest = messages.at(-1);
+    const entries = [];
+    const directRoomsByPeer = new Map();
+    for (const [id, room] of rooms) {
+        const peerId = room.kind === 'direct' ? room.members.find(uid => uid !== currentUserId) : undefined;
+        if (peerId) directRoomsByPeer.set(peerId, id);
+        const messages = roomFeeds.get(id)?.messages;
+        if (messages?.length) entries.push({ id, peerId, latest: messages.at(-1), messages });
+    }
+    entries.sort((first, second) => second.latest.timestamp.toMillis() - first.latest.timestamp.toMillis());
+
+    const rows = document.createDocumentFragment();
+    const shownPeers = new Set();
+    const today = new Date().toDateString();
+    for (const { id, peerId, latest, messages } of entries) {
+        if (peerId && shownPeers.has(peerId)) continue;
+        if (peerId) shownPeers.add(peerId);
+
+        const { name, iconUrl } = roomDetails(id, !peerId);
+        const item = listItem(name, iconUrl, listMessagePreview(latest), () => {
+            requestNotificationPermission();
+            openRoom(id);
+        });
+        item.dataset.roomId = id;
+
+        const date = latest.timestamp.toDate();
+        const time = element('time', 'room-time', listMessageTime(date, today));
+        time.dateTime = date.toISOString();
+        const meta = element('span', 'room-meta');
+        meta.append(time);
         const unread = messages.filter(message => message.type !== 'unsent' &&
             !message.readUsers.includes(currentUserId)).length;
-        return { id, latest, unread };
-    });
-    entries.sort((first, second) => (second.latest?.timestamp.toMillis() || 0) - (first.latest?.timestamp.toMillis() || 0));
-    roomList.replaceChildren();
-    let totalUnread = 0;
-    for (const { id, latest, unread } of entries) {
-        const { name, iconUrl } = roomDetails(id);
-        const preview = latest ? `${latest.senderName}: ${messageSummary(latest)}` : 'まだメッセージはありません';
-        const item = listItem(name, iconUrl, preview, () => openRoom(id));
-        item.dataset.roomId = id;
-        if (unread) item.append(element('span', 'room-badge', unread));
-        totalUnread += unread;
-        roomList.append(item);
+        if (unread) meta.append(element('span', 'room-badge', unread));
+        item.append(meta);
+        rows.append(item);
     }
+
+    for (const [friendId, friend] of friends()) {
+        if (shownPeers.has(friendId)) continue;
+        const defaultId = directRoomId(currentUserId, friendId);
+        const roomId = rooms.has(defaultId) ? defaultId : directRoomsByPeer.get(friendId) || defaultId;
+        const item = listItem(friend.name, friend.iconUrl, '', async () => {
+            requestNotificationPermission();
+            item.disabled = true;
+            try {
+                await openPrivateChat(friendId, roomId);
+            } catch {
+                alert('トークを開けませんでした。');
+            } finally {
+                item.disabled = false;
+            }
+        });
+        item.dataset.roomId = roomId;
+        rows.append(item);
+    }
+    roomList.replaceChildren(rows);
     syncRoomSelection();
-    for (const tab of [byId('tabTalk'), byId('tabTalk2')]) {
-        tab.querySelector('.tab-badge')?.remove();
-        if (totalUnread) tab.append(element('span', 'tab-badge', totalUnread > 99 ? '99+' : totalUnread));
-    }
 }
 
 function syncRoomSelection() {
-    for (const item of document.querySelectorAll('.list-item[data-room-id]')) {
+    for (const item of roomList.children) {
         if (item.dataset.roomId === currentRoomId) item.setAttribute('aria-current', 'true');
         else item.removeAttribute('aria-current');
     }

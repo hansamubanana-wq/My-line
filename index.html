@@ -44,36 +44,15 @@
         </form>
     </div>
 
-    <div id="memberScreen" class="screen" inert>
-        <div class="header">
-            <div class="header-top">
-                <div class="title" id="memberMainTitle">友だち</div>
-            </div>
-        </div>
-        <div class="list-content" style="display:flex; flex-direction:column; overflow:hidden;">
-            <div id="myProfileCardContainer"></div>
-            <div id="memberList" style="flex:1; overflow-y:auto;"></div>
-        </div>
-        <div class="tab-bar">
-            <button type="button" class="tab-item active" id="tabMember">友だち</button>
-            <button type="button" class="tab-item" id="tabTalk">トーク</button>
-        </div>
-    </div>
-
     <div id="listScreen" class="screen" inert>
         <div class="header">
-            <div class="header-top">
-                <div class="title">トーク</div>
+            <div class="header-top talk-list-header">
+                <button type="button" id="profileSettingsBtn" class="item-icon profile-settings-btn" aria-label="プロフィール設定"></button>
+                <h1 class="title">トーク</h1>
+                <button type="button" id="saveRoomBtn" class="room-create-btn">グループ作成</button>
             </div>
         </div>
-        <div class="create-room-box">
-            <button id="saveRoomBtn" class="room-create-btn">グループ作成</button>
-        </div>
         <div class="list-content" id="roomList"></div>
-        <div class="tab-bar">
-            <button type="button" class="tab-item" id="tabMember2">友だち</button>
-            <button type="button" class="tab-item active" id="tabTalk2">トーク</button>
-        </div>
     </div>
 
     <div id="roomScreen" class="screen" inert>

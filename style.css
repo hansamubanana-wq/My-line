@@ -64,7 +64,8 @@ body {
     font-weight: bold;
     font-size: 1.1rem;
 }
-#memberMainTitle { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.talk-list-header { justify-content: flex-start; gap: 10px; }
+.talk-list-header .room-create-btn { margin-left: auto; white-space: nowrap; }
 
 .back-btn {
     background-color: #4b5563;
@@ -86,31 +87,11 @@ body {
 #chatTitle img { width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; object-fit: cover; }
 #chatTitle span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
-/* タブバー（LINE風の画面下部切り替え） */
-.tab-bar {
-    display: flex;
-    border-top: 1px solid #e5e7eb;
-    background-color: #f9fafb;
-    padding-bottom: env(safe-area-inset-bottom);
-}
-.tab-item {
-    flex: 1;
-    border: 0;
-    background: transparent;
-    text-align: center;
-    padding: 12px 0;
-    font-size: 0.85rem;
-    color: #6b7280;
-    cursor: pointer;
-    font-weight: bold;
-}
-.tab-item.active {
-    color: #3b82f6;
-}
-
 /* リストの共通スタイル */
 .list-content {
     flex: 1;
+    min-height: 0;
+    padding-bottom: env(safe-area-inset-bottom);
     overflow-y: auto;
     background-color: #ffffff;
 }
@@ -141,10 +122,38 @@ body {
     margin-right: 15px;
     flex-shrink: 0;
 }
+.profile-settings-btn.item-icon {
+    width: 44px;
+    height: 44px;
+    margin-right: 0;
+    border: 0;
+    cursor: pointer;
+}
 .item-info { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .item-name { font-weight: bold; font-size: 0.95rem; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-sub { font-size: 0.8rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.room-badge { background-color: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; padding: 2px 7px; border-radius: 10px; margin-left: 10px; }
+.room-meta {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: 10px;
+}
+.room-time { color: #6b7280; font-size: 0.75rem; }
+.room-badge {
+    display: grid;
+    place-items: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 4px;
+    border-radius: 10px;
+    background-color: #15803d;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: bold;
+}
 
 /* 参加画面 */
 #authScreen {
@@ -246,49 +255,12 @@ body {
 .send-btn { background-color: #53b63e; color: white; border: none; padding: 7px 14px; border-radius: 20px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
 
 /* 部屋作成フォーム */
-.create-room-box { padding: 10px 15px; display: flex; gap: 5px; background-color: #f3f4f6; border-bottom: 1px solid #e5e7eb; }
 .room-create-btn { background-color: #10b981; color: white; border: none; padding: 6px 15px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
 
 .group-members { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; min-width: 0; }
 .group-members legend { padding: 0 4px; font-size: 0.85rem; font-weight: bold; }
 #createRoomMembers { max-height: 130px; overflow-y: auto; }
 .group-member-option { display: flex; align-items: center; gap: 8px; padding: 5px 0; overflow-wrap: anywhere; }
-
-/* 自分カードのスタイル */
-.my-profile-card {
-    display: flex;
-    align-items: center;
-    padding: 15px;
-    border-bottom: 8px solid #f3f4f6;
-    cursor: pointer;
-    background-color: #ffffff;
-    transition: background-color 0.2s;
-}
-.my-profile-card:active {
-    background-color: #f9fafb;
-}
-.my-profile-card .item-icon {
-    width: 55px;
-    height: 55px;
-    background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
-    border: 2px solid #e5e7eb;
-}
-.my-profile-card .item-icon img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 50%;
-}
-.my-profile-card .item-name {
-    font-size: 1.1rem;
-    font-weight: bold;
-    color: #111827;
-}
-.my-profile-card .item-sub {
-    font-size: 0.8rem;
-    color: #53b63e;
-    font-weight: bold;
-}
 
 /* モーダル */
 .modal {
@@ -543,12 +515,6 @@ body {
     object-fit: cover;
     border-radius: 50%;
 }
-.list-item img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 50%;
-}
 .item-icon img {
     width: 100%;
     height: 100%;
@@ -675,38 +641,6 @@ body {
 }
 .notification-close:hover {
     color: white;
-}
-
-/* 下部タブバーの赤い未読バッジ */
-.tab-item {
-    position: relative; /* バッジを絶対配置するための基点 */
-}
-.tab-badge {
-    position: absolute;
-    top: 3px;
-    right: 28%;
-    background-color: #ef4444;
-    color: white;
-    font-size: 0.65rem;
-    font-weight: bold;
-    min-width: 16px;
-    height: 16px;
-    border-radius: 8px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 0 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    animation: badge-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-@keyframes badge-pop {
-    0% {
-        transform: scale(0);
-    }
-    100% {
-        transform: scale(1);
-    }
 }
 
 /* ==========================================================================
@@ -960,7 +894,7 @@ html, body {
         background: #f3f4f6;
     }
 
-    #memberScreen, #listScreen {
+    #listScreen {
         width: var(--left-pane-width);
         border-right: 1px solid #e5e7eb;
         padding-left: env(safe-area-inset-left);
