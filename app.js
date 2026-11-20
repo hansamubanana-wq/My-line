@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import {
     getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp,
-    doc, updateDoc, arrayUnion, where, setDoc, getDocFromServer, deleteDoc, runTransaction
+    doc, updateDoc, arrayUnion, where, setDoc, getDocFromServer, deleteDoc, runTransaction, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -20,6 +20,7 @@ const auth = getAuth(app);
 
 const byId = id => document.getElementById(id);
 const screens = { auth: byId('authScreen'), member: byId('memberScreen'), list: byId('listScreen'), room: byId('roomScreen') };
+const wideLayout = window.matchMedia('(min-width: 768px)');
 const authSchool = byId('authSchool');
 const authColors = byId('authColors');
 const authName = byId('authName');
@@ -38,8 +39,14 @@ const announcementBar = byId('announcementBar');
 const messageActionModal = byId('messageActionModal');
 const actionUnsendBtn = byId('actionUnsendBtn');
 const groupDrawer = byId('groupDrawer');
+const maxJoinAttempts = 3;
+const joinLockDuration = 60 * 60 * 1000;
 
 let joining = false;
+let joinUnlockAt = 0;
+let joinUnlockTimer;
+let activeScreen = 'auth';
+let leftScreen = 'member';
 let currentUserId = null;
 let currentRoomId = null;
 let members = new Map();
@@ -86,12 +93,24 @@ function listItem(name, iconUrl, detail, onClick) {
     return item;
 }
 
-function showScreen(key) {
+function syncScreens() {
     for (const [name, screen] of Object.entries(screens)) {
-        screen.classList.toggle('active', name === key);
-        screen.inert = name !== key;
+        const visible = name === activeScreen || (wideLayout.matches && activeScreen === 'room' && name === leftScreen);
+        screen.classList.toggle('active', visible);
+        screen.inert = !visible;
     }
 }
+
+function showScreen(key) {
+    if (key === 'member' || key === 'list') {
+        leftScreen = key;
+        if (currentRoomId) key = 'room';
+    }
+    activeScreen = key;
+    syncScreens();
+}
+
+wideLayout.addEventListener('change', syncScreens);
 
 function setScreenSize() {
     document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
@@ -139,6 +158,46 @@ function leaveApp() {
     showScreen('auth');
 }
 
+function attemptUnlockTime(attempt) {
+    // The third attempt stores the server time. The rules and UI both add one hour.
+    return attempt?.count === maxJoinAttempts ? attempt.lockedUntil.toMillis() + joinLockDuration : 0;
+}
+
+function updateJoinLock(unlockAt = joinUnlockAt) {
+    clearTimeout(joinUnlockTimer);
+    joinUnlockAt = unlockAt;
+    const remaining = unlockAt - Date.now();
+    const locked = remaining > 0;
+    if (!locked && authSchool.disabled) authError.textContent = '';
+    authSchool.disabled = authColors.disabled = authName.disabled = locked;
+    authBtn.disabled = joining || locked;
+    if (locked) {
+        const time = new Date(unlockAt).toLocaleString('ja-JP');
+        authError.textContent = `3回間違えたため、1時間ロックしました\n解除時刻 ${time}`;
+        joinUnlockTimer = setTimeout(updateJoinLock, remaining);
+    }
+    return locked;
+}
+
+async function readOwnProfile(ref) {
+    try {
+        return await getDocFromServer(ref);
+    } catch (error) {
+        if (error.code !== 'permission-denied') throw error;
+        return null;
+    }
+}
+
+function recordJoinAttempt(ref, guess) {
+    return runTransaction(db, async transaction => {
+        const previous = (await transaction.get(ref)).data();
+        if (attemptUnlockTime(previous) > Date.now()) return 0;
+        const count = previous && previous.count < maxJoinAttempts ? previous.count + 1 : 1;
+        transaction.set(ref, { count, guess, lockedUntil: count === maxJoinAttempts ? serverTimestamp() : Timestamp.fromMillis(0) });
+        return count;
+    });
+}
+
 byId('authForm').addEventListener('submit', async event => {
     event.preventDefault();
     if (authBtn.disabled) return;
@@ -159,19 +218,26 @@ byId('authForm').addEventListener('submit', async event => {
     try {
         const user = auth.currentUser?.isAnonymous ? auth.currentUser : (await signInAnonymously(auth)).user;
         const profileRef = doc(db, 'members', user.uid);
+        const attemptRef = doc(db, 'attempts', user.uid);
+        let count = 0;
+        let joined = false;
         try {
-            await setDoc(doc(db, 'joins', user.uid), { code });
+            count = await recordJoinAttempt(attemptRef, code);
+            if (count) {
+                await setDoc(doc(db, 'joins', user.uid), { code });
+                joined = true;
+            }
         } catch (error) {
             if (error.code !== 'permission-denied') throw error;
-            // joins は読めないため、プロフィールを読めるかで参加済みかを確認する。
-            try {
-                await getDocFromServer(profileRef);
-            } catch (profileError) {
-                if (profileError.code !== 'permission-denied') throw profileError;
-                authError.textContent = '答えが違います';
-                authSchool.focus();
-                return;
-            }
+        }
+        // プロフィール作成だけに失敗した場合は、参加済みの UID で作成をやり直せる。
+        if (!joined && !await readOwnProfile(profileRef)) {
+            const attempt = (await getDocFromServer(attemptRef)).data();
+            if (updateJoinLock(attemptUnlockTime(attempt))) return;
+            if (!count || attempt?.guess !== code) throw new Error('参加の試行を確認できませんでした');
+            authError.textContent = `答えが違います（あと${maxJoinAttempts - attempt.count}回）`;
+            authSchool.focus();
+            return;
         }
 
         const profile = await runTransaction(db, async transaction => {
@@ -183,6 +249,7 @@ byId('authForm').addEventListener('submit', async event => {
         });
 
         if (auth.currentUser?.uid === user.uid) {
+            updateJoinLock(0);
             event.target.reset();
             enterApp(user.uid, profile);
         }
@@ -192,7 +259,7 @@ byId('authForm').addEventListener('submit', async event => {
             : '参加できませんでした。もう一度お試しください';
     } finally {
         joining = false;
-        authBtn.disabled = false;
+        updateJoinLock();
     }
 });
 
@@ -306,6 +373,7 @@ function startMemberListListener(uid) {
                     item.disabled = false;
                 }
             });
+            item.dataset.roomId = directRoomId(uid, friendId);
             memberList.appendChild(item);
         }
         if (createRoomModal.classList.contains('active')) renderGroupMemberOptions();
@@ -396,10 +464,14 @@ createRoomModalBtn.addEventListener('click', async () => {
     }
 });
 
+function directRoomId(uid, friendId) {
+    return [uid, friendId].sort().join('_');
+}
+
 async function openPrivateChat(friendId) {
     const uid = currentUserId;
     const participantIds = [uid, friendId].sort();
-    const roomId = participantIds.join('_');
+    const roomId = directRoomId(uid, friendId);
     if (!rooms.has(roomId)) {
         const room = { kind: 'direct', members: participantIds };
         await setDoc(doc(db, 'rooms', roomId), room);
@@ -479,13 +551,22 @@ function renderRoomList() {
         const { name, iconUrl } = roomDetails(id);
         const preview = latest ? `${latest.senderName}: ${messageSummary(latest)}` : 'まだメッセージはありません';
         const item = listItem(name, iconUrl, preview, () => openRoom(id));
+        item.dataset.roomId = id;
         if (unread) item.append(element('span', 'room-badge', unread));
         totalUnread += unread;
         roomList.append(item);
     }
+    syncRoomSelection();
     for (const tab of [byId('tabTalk'), byId('tabTalk2')]) {
         tab.querySelector('.tab-badge')?.remove();
         if (totalUnread) tab.append(element('span', 'tab-badge', totalUnread > 99 ? '99+' : totalUnread));
+    }
+}
+
+function syncRoomSelection() {
+    for (const item of document.querySelectorAll('.list-item[data-room-id]')) {
+        if (item.dataset.roomId === currentRoomId) item.setAttribute('aria-current', 'true');
+        else item.removeAttribute('aria-current');
     }
 }
 
@@ -556,6 +637,7 @@ function closeRoom() {
     chatInput.value = '';
     chatLog.replaceChildren();
     currentRoomId = null;
+    syncRoomSelection();
 }
 
 function openRoom(roomId) {
@@ -563,6 +645,7 @@ function openRoom(roomId) {
     if (currentRoomId === roomId) return;
     closeRoom();
     currentRoomId = roomId;
+    syncRoomSelection();
     showScreen('room');
     renderRoomTitle();
     watchRoomMessages(roomId);
@@ -836,14 +919,19 @@ function renderChat() {
 onAuthStateChanged(auth, async user => {
     if (joining) return;
     if (currentUserId && currentUserId !== user?.uid) leaveApp();
+    let unlockAt = 0;
     if (user?.isAnonymous) {
         authBtn.disabled = true;
         try {
-            const profile = await getDocFromServer(doc(db, 'members', user.uid));
-            if (profile.exists() && auth.currentUser?.uid === user.uid) enterApp(user.uid, profile.data());
-        } catch (error) {
-            if (error.code !== 'permission-denied') authError.textContent = '登録を確認できませんでした。';
+            const profile = await readOwnProfile(doc(db, 'members', user.uid));
+            if (profile?.exists() && auth.currentUser?.uid === user.uid) enterApp(user.uid, profile.data());
+            if (!profile) {
+                const attempt = await getDocFromServer(doc(db, 'attempts', user.uid));
+                unlockAt = attemptUnlockTime(attempt.data());
+            }
+        } catch {
+            authError.textContent = '登録を確認できませんでした。';
         }
     }
-    if (!joining) authBtn.disabled = false;
+    if (!joining && auth.currentUser?.uid === user?.uid) updateJoinLock(unlockAt);
 });

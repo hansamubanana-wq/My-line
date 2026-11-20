@@ -105,6 +105,31 @@
         </div>
         <!-- スタンプ選択パネル -->
         <div id="stickerPicker" class="sticker-picker"></div>
+
+        <!-- グループメニュー（ドロワー） -->
+        <div id="groupDrawer" class="drawer">
+            <div class="drawer-content">
+                <div class="drawer-header">
+                    <h3>トーク設定</h3>
+                    <button id="closeDrawerBtn" class="close-drawer-btn">×</button>
+                </div>
+                <div class="drawer-body">
+                    <div class="drawer-section">
+                        <label>トークルーム名</label>
+                        <div class="room-name-edit-box">
+                            <input type="text" id="drawerRoomNameInput" maxlength="40">
+                            <button id="drawerRoomNameSaveBtn">変更</button>
+                        </div>
+                    </div>
+                    <div class="drawer-section">
+                        <label id="drawerMemberCount">メンバー (0)</label>
+                        <div id="drawerMemberList" class="drawer-member-list">
+                            <!-- メンバーがグリッド表示される -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- プロフィール編集モーダル -->
@@ -151,31 +176,6 @@
             <div class="modal-btn-group">
                 <button id="createRoomModalBtn" class="modal-btn save">作成</button>
                 <button id="createRoomCloseBtn" class="modal-btn cancel">キャンセル</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- グループメニュー（ドロワー） -->
-    <div id="groupDrawer" class="drawer">
-        <div class="drawer-content">
-            <div class="drawer-header">
-                <h3>トーク設定</h3>
-                <button id="closeDrawerBtn" class="close-drawer-btn">×</button>
-            </div>
-            <div class="drawer-body">
-                <div class="drawer-section">
-                    <label>トークルーム名</label>
-                    <div class="room-name-edit-box">
-                        <input type="text" id="drawerRoomNameInput" maxlength="40">
-                        <button id="drawerRoomNameSaveBtn">変更</button>
-                    </div>
-                </div>
-                <div class="drawer-section">
-                    <label id="drawerMemberCount">メンバー (0)</label>
-                    <div id="drawerMemberList" class="drawer-member-list">
-                        <!-- メンバーがグリッド表示される -->
-                    </div>
-                </div>
             </div>
         </div>
     </div>

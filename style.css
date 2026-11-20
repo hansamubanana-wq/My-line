@@ -183,11 +183,11 @@ body {
 }
 .auth-input:focus-visible { outline: 2px solid #a1c4fd; outline-offset: 2px; }
 .auth-btn:disabled { opacity: 0.65; cursor: wait; }
-.auth-error { color: #fecaca; font-size: 0.9rem; text-align: center; }
+.auth-error { color: #fecaca; font-size: 0.9rem; text-align: center; white-space: pre-line; }
 .auth-error:empty { margin-top: -15px; }
 
 /* --- トークルーム画面のスタイル --- */
-#roomScreen { background-color: #7494c0; }
+#roomScreen { background-color: #7494c0; overflow-x: clip; }
 .chat-log {
     flex: 1;
     overflow-y: auto;
@@ -943,3 +943,62 @@ html, body {
     place-items: center;
 }
 .color-card:has(input:focus-visible) { outline: 3px solid #a1c4fd; outline-offset: 3px; }
+.color-card input:disabled, .auth-box:has(#authSchool:disabled) .auth-btn { cursor: not-allowed; }
+
+@media (min-width: 768px) {
+    body { height: 100dvh; }
+
+    .chat-container {
+        --left-pane-width: 340px;
+        width: 100vw;
+        height: 100dvh;
+        max-width: none;
+        max-height: none;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        background: #f3f4f6;
+    }
+
+    #memberScreen, #listScreen {
+        width: var(--left-pane-width);
+        border-right: 1px solid #e5e7eb;
+        padding-left: env(safe-area-inset-left);
+    }
+
+    #roomScreen {
+        left: var(--left-pane-width);
+        width: calc(100% - var(--left-pane-width));
+        padding-right: env(safe-area-inset-right);
+        overflow: clip;
+    }
+
+    .screen > .header { padding-top: calc(12px + env(safe-area-inset-top)); }
+    #backBtn { display: none; }
+    #chatTitle { margin-left: 0; }
+    .list-item[aria-current="true"] { background: #e8f0fe; }
+
+    #authScreen {
+        padding: max(30px, env(safe-area-inset-top)) max(30px, env(safe-area-inset-right))
+            max(30px, env(safe-area-inset-bottom)) max(30px, env(safe-area-inset-left));
+    }
+    .auth-box { width: 400px; max-width: 100%; flex-shrink: 0; }
+
+    .modal {
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+            env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    .drawer { padding-right: env(safe-area-inset-right); }
+    .drawer-header { padding-top: calc(15px + env(safe-area-inset-top)); }
+    .drawer-body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+    .announcement-bar {
+        top: calc(50px + env(safe-area-inset-top));
+        right: env(safe-area-inset-right);
+    }
+    .sticker-picker { width: calc(100% - env(safe-area-inset-right)); }
+    .notification-banner {
+        left: calc(12px + env(safe-area-inset-left));
+        right: calc(12px + env(safe-area-inset-right));
+    }
+    .notification-banner.active { top: calc(15px + env(safe-area-inset-top)); }
+}

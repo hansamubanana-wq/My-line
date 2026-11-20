@@ -50,10 +50,35 @@ service cloud.firestore {
       return messageId is string && messageId.matches('[A-Za-z0-9]{20}');
     }
 
+    match /attempts/{uid} {
+      function validAttempt() {
+        let data = request.resource.data;
+        return isOwner(uid) && !exists(/databases/$(database)/documents/joins/$(uid)) &&
+          hasExactKeys(data, ['count', 'guess', 'lockedUntil']) &&
+          data.count is int && data.count >= 1 && data.count <= 3 &&
+          data.guess is string && data.guess.size() >= 1 && data.guess.size() <= 256 &&
+          // The server timestamp records the third attempt. Its lock expires one hour later.
+          data.lockedUntil == (data.count == 3 ? request.time : timestamp.value(0));
+      }
+
+      allow read: if isOwner(uid);
+      allow create: if validAttempt() && request.resource.data.count == 1;
+      allow update: if validAttempt() &&
+        ((resource.data.count < 3 && request.resource.data.count == resource.data.count + 1) ||
+         (resource.data.count == 3 && resource.data.lockedUntil + duration.value(1, 'h') <= request.time &&
+          request.resource.data.count == 1));
+    }
+
     match /joins/{uid} {
+      function matchesAttempt(code) {
+        let attempt = /databases/$(database)/documents/attempts/$(uid);
+        return exists(attempt) && code == get(attempt).data.guess;
+      }
+
       allow create: if isOwner(uid) && request.auth.token.firebase.sign_in_provider == 'anonymous' &&
         hasExactKeys(request.resource.data, ['code']) && request.resource.data.code is string &&
         request.resource.data.code.size() > 0 && request.resource.data.code.size() <= 256 &&
+        matchesAttempt(request.resource.data.code) &&
         hashing.sha256(request.resource.data.code).toHexString().lower() in ['REPLACE_WITH_SHA256_HEX'];
     }
 
