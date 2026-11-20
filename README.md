@@ -13,11 +13,11 @@
 - プロフィールの名前・一言・アイコン編集、端末ごとのトーク名変更
 - テキスト、スタンプ、返信、既読・未読、送信取り消し、アナウンス
 - Imgurによる画像送信。アップロードできないときは圧縮したJPEGをFirestoreに保存します。
-- アプリ内通知、ブラウザーが対応している場合のOS通知、ホーム画面へのインストール
+- アプリ内通知、FCM Web Push によるアプリを閉じている間の通知、ホーム画面へのインストール
 
 ## 使用技術
 
-HTML、CSS、JavaScript、Firebase Authentication（匿名認証）、Cloud Firestore、Firebase Security Rules、Service Worker、Web App Manifest、Imgur API。
+HTML、CSS、JavaScript、Firebase Authentication（匿名認証）、Cloud Firestore、Firebase Security Rules、Firebase Cloud Messaging、Service Worker、Web App Manifest、Vercel Functions、Imgur API。
 
 ## 起動方法
 
@@ -34,6 +34,16 @@ HTML、CSS、JavaScript、Firebase Authentication（匿名認証）、Cloud Fire
 
 新しいルールでは `joins` と `members` で参加状態を管理し、トーク履歴は `rooms/{roomId}/messages` に保存します。既存のアカウントやトーク履歴は引き継ぎません。合言葉の変更後も、参加済みの端末は同じ匿名認証で利用できます。
 
+### プッシュ通知の設定
+
+1. Firebase コンソールの **プロジェクトの設定 → Cloud Messaging → ウェブ構成 → ウェブプッシュ証明書** で鍵ペアを生成し、公開鍵を `app.js` の `VAPID_PUBLIC_KEY` に設定します。空欄またはプレースホルダーの間は通知設定が表示されません。
+2. 同じ Firebase プロジェクトの **プロジェクトの設定 → サービスアカウント → 新しい秘密鍵を生成** で取得した JSON の内容を、Vercel の **Settings → Environment Variables** で `FIREBASE_SERVICE_ACCOUNT` に設定します。鍵ファイルや秘密鍵の内容を Git に入れないでください。
+3. 参加用ハッシュを設定した本番用ルールに、`firestore.rules` の `pushTokens` と `notifySent` のルールを反映して公開します。
+4. Vercel のフレームワークプリセットは **Other**、配信先はリポジトリのルート、ビルドコマンドは空欄です。`api/notify.js` は Node.js Function として動作します。依存関係のインストールは有効にします。通知送信には Vercel の Function が動く HTTPS 環境が必要です。
+5. iOS・iPadOS 16.4 以降は、Safari からホーム画面に追加し、そのアイコンからアプリを開いて「通知をオンにする」を押します。Android・PC では対応ブラウザーで同じボタンを押します。
+
+開いているトークが前面にある間は、Service Worker がそのトークの通知表示を省きます。WebKit では通知を表示しないプッシュの扱いにより購読が解除される場合があります。 [WebKit の Web Push 仕様](https://webkit.org/blog/12945/meet-web-push/)
+
 ## 運用
 
 参加のたびに匿名認証の UID ごとに `attempts/{uid}` へ試行回数と答えを記録します。Firestore は `joins/{uid}` の答えが記録済みの `guess` と一致するときだけハッシュを判定するため、1回の記録で試せる答えは1種類です。3回目の `lockedUntil` には Firestore のサーバー時刻を保存し、その時刻から1時間は新しい答えを記録できません。3回目でも正解なら参加でき、ロック解除後の次の試行は1回目になります。ページを開き直してもサーバーの記録を読み、解除時刻を表示します。
@@ -47,7 +57,9 @@ HTML、CSS、JavaScript、Firebase Authentication（匿名認証）、Cloud Fire
 ├── index.html       画面とOGP設定
 ├── style.css        画面のスタイル
 ├── app.js           匿名参加、トーク一覧、トーク、通知
-├── sw.js            アプリのキャッシュ
+├── sw.js            アプリのキャッシュとプッシュ通知の受信
+├── api/notify.js    Vercel Function によるプッシュ通知の送信
+├── package.json     通知送信に使う Firebase Admin SDK の依存関係
 ├── manifest.json    PWA設定と192pxアイコン
 ├── icon.png         512pxアプリアイコン兼OGP画像
 ├── firestore.rules  Firestoreのアクセス制御
@@ -58,4 +70,4 @@ HTML、CSS、JavaScript、Firebase Authentication（匿名認証）、Cloud Fire
 ## 今後の改善案
 
 - トーク履歴のページ分割と、メッセージが増えた際の未読集計の効率化
-- 管理者による参加解除、アプリを閉じている間のプッシュ通知
+- 管理者による参加解除

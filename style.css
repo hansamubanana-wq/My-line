@@ -95,6 +95,58 @@ body {
     overflow-y: auto;
     background-color: #ffffff;
 }
+.push-prompt:not([hidden]) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: space-between;
+    flex-shrink: 0;
+    padding: 4px 12px;
+    background: #eef3fa;
+    color: #273246;
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+}
+
+.push-enable, .push-prompt-close {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.push-enable {
+    padding: 6px 0;
+    color: #234c86;
+    font-size: 0.875rem;
+    font-weight: 700;
+    text-decoration: underline;
+}
+
+.push-enable:disabled { opacity: 0.65; cursor: default; }
+
+.push-prompt-close {
+    flex: 0 0 32px;
+    min-height: 32px;
+    color: inherit;
+    font-size: 1.25rem;
+}
+
+.push-settings {
+    color: #273246;
+    font-size: 0.875rem;
+    overflow-wrap: anywhere;
+}
+
+.push-settings-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+}
+
+#pushSettingsStatus { color: #475569; }
+#pushSettingsHint { margin-top: 4px; font-size: 0.8125rem; }
+
 .list-item {
     display: flex;
     align-items: center;

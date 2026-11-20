@@ -52,6 +52,11 @@
                 <button type="button" id="saveRoomBtn" class="room-create-btn">グループ作成</button>
             </div>
         </div>
+        <div id="pushPrompt" class="push-prompt" hidden>
+            <button type="button" id="pushPromptEnable" class="push-enable">通知をオンにする</button>
+            <span id="pushPromptHint" hidden></span>
+            <button type="button" id="pushPromptClose" class="push-prompt-close" aria-label="通知の案内を閉じる">×</button>
+        </div>
         <div class="list-content" id="roomList"></div>
     </div>
 
@@ -128,6 +133,14 @@
                 <label for="profileModalStatus">ステータスメッセージ (一言)</label>
                 <input type="text" id="profileModalStatus" placeholder="今日の気分や予定など" maxlength="120">
             </div>
+            <div id="pushSettings" class="push-settings" hidden>
+                <div class="push-settings-row">
+                    <span>通知</span>
+                    <span id="pushSettingsStatus" role="status"></span>
+                    <button type="button" id="pushSettingsEnable" class="push-enable">オンにする</button>
+                </div>
+                <p id="pushSettingsHint" hidden></p>
+            </div>
             <div class="modal-btn-group">
                 <button id="profileSaveBtn" class="modal-btn save">保存</button>
                 <button id="profileCloseBtn" class="modal-btn cancel">閉じる</button>
@@ -173,14 +186,5 @@
 </div>
 
 <script type="module" src="app.js"></script>
-<script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js')
-                .then(reg => console.log('Service Worker registered successfully!', reg.scope))
-                .catch(err => console.error('Service Worker registration failed:', err));
-        });
-    }
-</script>
 </body>
 </html>

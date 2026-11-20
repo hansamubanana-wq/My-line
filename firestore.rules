@@ -91,6 +91,29 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
+    match /pushTokens/{uid} {
+      function validTokenAt(tokens, index) {
+        return tokens.size() <= index || (tokens[index] is string && tokens[index].size() <= 4096);
+      }
+
+      function validPushTokens(data) {
+        let tokens = data.tokens;
+        return hasExactKeys(data, ['tokens', 'updatedAt']) && tokens is list && tokens.size() <= 10 &&
+          data.updatedAt is timestamp && data.updatedAt == request.time &&
+          validTokenAt(tokens, 0) && validTokenAt(tokens, 1) && validTokenAt(tokens, 2) &&
+          validTokenAt(tokens, 3) && validTokenAt(tokens, 4) && validTokenAt(tokens, 5) &&
+          validTokenAt(tokens, 6) && validTokenAt(tokens, 7) && validTokenAt(tokens, 8) &&
+          validTokenAt(tokens, 9);
+      }
+
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid) && validPushTokens(request.resource.data);
+    }
+
+    match /notifySent/{id} {
+      allow read, write: if false;
+    }
+
     match /rooms/{roomId} {
       function validDirectRoom(data) {
         return hasExactKeys(data, ['kind', 'members']) && data.members.size() == 2 &&

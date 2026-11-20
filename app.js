@@ -5,6 +5,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
+const VAPID_PUBLIC_KEY = 'REPLACE_WITH_VAPID_KEY';
+const vapidKey = VAPID_PUBLIC_KEY.trim();
+const pushConfigured = Boolean(vapidKey && vapidKey !== 'REPLACE_WITH_VAPID_KEY');
 const firebaseConfig = {
     apiKey: "AIzaSyCbFEZH9VywEFumJRbbqPftEJAZJDb8hQ0",
     authDomain: "my-line-chat-f467e.firebaseapp.com",
@@ -17,6 +20,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const serviceWorkerRegistration = 'serviceWorker' in navigator
+    ? navigator.serviceWorker.register('./sw.js').catch(error => {
+        console.error('Service Worker の登録に失敗しました。', error);
+        return null;
+    })
+    : Promise.resolve(null);
 
 const byId = id => document.getElementById(id);
 const screens = { auth: byId('authScreen'), list: byId('listScreen'), room: byId('roomScreen') };
@@ -28,6 +37,13 @@ const authBtn = byId('authBtn');
 const authError = byId('authError');
 const profileSettingsBtn = byId('profileSettingsBtn');
 const roomList = byId('roomList');
+const pushPrompt = byId('pushPrompt');
+const pushPromptEnable = byId('pushPromptEnable');
+const pushPromptHint = byId('pushPromptHint');
+const pushSettings = byId('pushSettings');
+const pushSettingsEnable = byId('pushSettingsEnable');
+const pushSettingsStatus = byId('pushSettingsStatus');
+const pushSettingsHint = byId('pushSettingsHint');
 const chatLog = byId('chatLog');
 const chatInput = byId('chatInput');
 const sendBtn = byId('sendBtn');
@@ -58,6 +74,138 @@ let announcementId;
 let replyToMessage;
 let selectedMessage;
 let bannerTimeout;
+let linkedRoomId = new URLSearchParams(location.search).get('room');
+
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = window.matchMedia('(display-mode: standalone)');
+const needsHomeScreen = () => isIOS && navigator.standalone !== true && !standalone.matches;
+const pushPromptDismissedKey = 'my-line-push-prompt-dismissed';
+const homeScreenHint = 'Safari の共有 → ホーム画面に追加 してから開くと通知を受け取れます';
+let pushPromptDismissed = false;
+let messagingSdk;
+let messagingReady;
+let pushRegistration;
+let pushRegistrationFailed = false;
+let lastPushPermission;
+
+function renderPushSettings() {
+    const installFirst = needsHomeScreen();
+    const available = pushConfigured && currentUserId && (installFirst || messagingSdk);
+    const permission = window.Notification?.permission || 'default';
+    lastPushPermission = permission;
+    const canEnable = !installFirst && (permission === 'default' ||
+        (permission === 'granted' && pushRegistrationFailed));
+    pushPrompt.hidden = !available || pushPromptDismissed || permission !== 'default';
+    pushPromptEnable.hidden = installFirst;
+    pushPromptHint.hidden = !installFirst;
+    pushPromptEnable.disabled = Boolean(pushRegistration);
+    pushSettings.hidden = !available;
+    pushSettingsEnable.hidden = !canEnable;
+    pushSettingsEnable.disabled = Boolean(pushRegistration);
+
+    let status = 'オフ';
+    let hint = '';
+    if (installFirst) {
+        hint = homeScreenHint;
+    } else if (permission === 'denied') {
+        status = 'ブロック中';
+        hint = isIOS ? '「設定」→「通知」→「my-line」で通知を許可してください。'
+            : 'ブラウザーのサイト設定で、このサイトの通知を許可してください。';
+    } else if (pushRegistration) {
+        status = '設定中…';
+    } else if (pushRegistrationFailed) {
+        hint = '通知の設定に失敗しました。もう一度お試しください。';
+    } else if (permission === 'granted') {
+        status = 'オン';
+    }
+    pushSettingsStatus.textContent = status;
+    pushSettingsHint.textContent = hint;
+    pushSettingsHint.hidden = !hint;
+}
+
+async function savePushToken(uid) {
+    const registration = await serviceWorkerRegistration;
+    if (!registration) throw new Error('Service Worker unavailable');
+    const activeRegistration = registration.active ? registration : await navigator.serviceWorker.ready;
+    if (uid !== currentUserId || Notification.permission !== 'granted') return;
+    const { getMessaging, getToken } = messagingSdk;
+    const token = await getToken(getMessaging(app), { vapidKey, serviceWorkerRegistration: activeRegistration });
+    if (!token) throw new Error('FCM token unavailable');
+    if (uid !== currentUserId) return;
+
+    const ref = doc(db, 'pushTokens', uid);
+    await runTransaction(db, async transaction => {
+        const snapshot = await transaction.get(ref);
+        const tokens = [...new Set(snapshot.data()?.tokens || [])].filter(value => value !== token);
+        transaction.set(ref, { tokens: [...tokens, token].slice(-10), updatedAt: serverTimestamp() });
+    });
+}
+
+function registerPushForCurrentUser(permission) {
+    const uid = currentUserId;
+    if (!uid || pushRegistration) return;
+    pushRegistrationFailed = false;
+    pushRegistration = Promise.resolve(permission).then(result => {
+        if (result === 'granted' && uid === currentUserId) return savePushToken(uid);
+    }).catch(() => {
+        if (uid === currentUserId) pushRegistrationFailed = true;
+    }).finally(() => {
+        pushRegistration = undefined;
+        if (currentUserId && uid !== currentUserId) refreshPushSettings();
+        else renderPushSettings();
+    });
+    renderPushSettings();
+}
+
+function refreshPushSettings() {
+    renderPushSettings();
+    if (!pushConfigured || !currentUserId || needsHomeScreen()) return;
+    messagingReady ??= import('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js')
+        .then(async sdk => await sdk.isSupported() ? sdk : undefined).catch(() => undefined);
+    void messagingReady.then(sdk => {
+        messagingSdk = sdk;
+        if (sdk && window.Notification?.permission === 'granted') registerPushForCurrentUser('granted');
+        else renderPushSettings();
+    });
+}
+
+if (pushConfigured) {
+    pushPromptHint.textContent = homeScreenHint;
+    try {
+        pushPromptDismissed = localStorage.getItem(pushPromptDismissedKey) === '1';
+    } catch {}
+    byId('pushPromptClose').addEventListener('click', () => {
+        pushPromptDismissed = true;
+        try {
+            localStorage.setItem(pushPromptDismissedKey, '1');
+        } catch {}
+        renderPushSettings();
+    });
+
+    const enablePush = () => {
+        if (!currentUserId || !messagingSdk || pushRegistration || needsHomeScreen()) return;
+        const permission = Notification.permission;
+        if (permission !== 'denied') {
+            registerPushForCurrentUser(permission === 'default' ? Notification.requestPermission() : permission);
+        }
+    };
+    pushPromptEnable.addEventListener('click', enablePush);
+    pushSettingsEnable.addEventListener('click', enablePush);
+    standalone.addEventListener('change', refreshPushSettings);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        if (window.Notification?.permission === 'granted' && lastPushPermission !== 'granted') refreshPushSettings();
+        else renderPushSettings();
+    });
+}
+
+navigator.serviceWorker?.addEventListener('message', event => {
+    if (event.data?.type === 'is-room-open' && event.ports[0]) {
+        event.ports[0].postMessage(document.visibilityState === 'visible' &&
+            activeScreen === 'room' && currentRoomId === event.data.roomId);
+    }
+});
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -114,12 +262,6 @@ window.addEventListener('resize', setScreenSize);
 window.addEventListener('orientationchange', setScreenSize);
 setScreenSize();
 
-function requestNotificationPermission() {
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
-    }
-}
-
 function enterApp(uid, profile) {
     if (currentUserId === uid) return;
     currentUserId = uid;
@@ -128,6 +270,7 @@ function enterApp(uid, profile) {
     showScreen('list');
     startMemberListListener(uid);
     startRoomsListener(uid);
+    refreshPushSettings();
 }
 
 function leaveApp() {
@@ -139,6 +282,8 @@ function leaveApp() {
     rooms.clear();
     members.clear();
     currentUserId = null;
+    pushRegistrationFailed = false;
+    renderPushSettings();
     profileModal.classList.remove('active');
     createRoomModal.classList.remove('active');
     roomList.replaceChildren();
@@ -285,6 +430,7 @@ function openProfileModal() {
     profileModalStatus.value = profile.status;
     profileIconUrl = profile.iconUrl;
     setAvatar(profileModalIcon, profile.name, profileIconUrl);
+    renderPushSettings();
     profileModal.classList.add('active');
 }
 
@@ -376,7 +522,6 @@ function renderGroupMemberOptions() {
 }
 
 byId('saveRoomBtn').addEventListener('click', () => {
-    requestNotificationPermission();
     createRoomModalName.value = '';
     createRoomModalIcon.textContent = '👥';
     roomIconUrl = '';
@@ -466,6 +611,14 @@ function startRoomsListener(uid) {
             closeRoom();
             showScreen('list');
         }
+        if (linkedRoomId && !snapshot.metadata.fromCache) {
+            const roomId = linkedRoomId;
+            linkedRoomId = null;
+            const url = new URL(location.href);
+            url.searchParams.delete('room');
+            history.replaceState(history.state, '', url);
+            if (rooms.has(roomId)) openRoom(roomId);
+        }
         renderRoomList();
     }, error => console.error('トーク一覧の取得に失敗しました。', error));
 }
@@ -540,10 +693,7 @@ function renderRoomList() {
         if (peerId) shownPeers.add(peerId);
 
         const { name, iconUrl } = roomDetails(id, !peerId);
-        const item = listItem(name, iconUrl, listMessagePreview(latest), () => {
-            requestNotificationPermission();
-            openRoom(id);
-        });
+        const item = listItem(name, iconUrl, listMessagePreview(latest), () => openRoom(id));
         item.dataset.roomId = id;
 
         const date = latest.timestamp.toDate();
@@ -563,7 +713,6 @@ function renderRoomList() {
         const defaultId = directRoomId(currentUserId, friendId);
         const roomId = rooms.has(defaultId) ? defaultId : directRoomsByPeer.get(friendId) || defaultId;
         const item = listItem(friend.name, friend.iconUrl, '', async () => {
-            requestNotificationPermission();
             item.disabled = true;
             try {
                 await openPrivateChat(friendId, roomId);
@@ -619,19 +768,6 @@ function showInAppNotification(roomId, message) {
     notificationBanner.classList.add('active');
     clearTimeout(bannerTimeout);
     bannerTimeout = setTimeout(() => notificationBanner.classList.remove('active'), 4000);
-
-    if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-            const notification = new Notification(title, { body, icon: message.senderIconUrl || 'icon.png', tag: roomId });
-            notification.onclick = () => {
-                window.focus();
-                if (rooms.has(roomId)) openRoom(roomId);
-                notification.close();
-            };
-        } catch {
-            // OS 通知が使えないブラウザでもアプリ内通知を表示する。
-        }
-    }
 }
 
 function renderRoomTitle() {
@@ -720,18 +856,30 @@ for (const sticker of STICKERS) {
 }
 byId('stickerBtn').addEventListener('click', () => stickerPicker.classList.toggle('active'));
 
+async function notifyRecipients(user, roomId, messageId) {
+    const idToken = await user.getIdToken();
+    await fetch('/api/notify', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ roomId, messageId })
+    });
+}
+
 async function sendMessage(type, text = '', imageUrl = '') {
     const uid = currentUserId;
+    const user = auth.currentUser;
     const roomId = currentRoomId;
     const profile = members.get(uid);
     if (!roomId || !profile || sendBtn.disabled) return;
     const replyId = replyToMessage?.id || '';
     sendBtn.disabled = true;
     try {
-        await addDoc(collection(db, 'rooms', roomId, 'messages'), {
+        const message = await addDoc(collection(db, 'rooms', roomId, 'messages'), {
             senderId: uid, senderName: profile.name, senderIconUrl: profile.iconUrl,
             type, text, imageUrl, replyTo: replyId, timestamp: serverTimestamp(), readUsers: [uid]
         });
+        if (user?.uid === uid) void notifyRecipients(user, roomId, message.id).catch(() => {});
         if (roomId === currentRoomId && uid === currentUserId) {
             if (type === 'text' && chatInput.value.trim() === text) chatInput.value = '';
             if (replyToMessage?.id === replyId) clearReply();
