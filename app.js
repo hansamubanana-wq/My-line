@@ -1042,13 +1042,16 @@ function closeMessageActions() {
 }
 
 byId('actionCloseBtn').addEventListener('click', closeMessageActions);
-byId('actionReplyBtn').addEventListener('click', () => {
-    if (!selectedMessage) return;
-    replyToMessage = selectedMessage;
-    byId('replyPreviewText').textContent = `${selectedMessage.senderName}さんへの返信: ${messageSummary(selectedMessage)}`;
+function startReply(message) {
+    replyToMessage = message;
+    byId('replyPreviewText').textContent = `${message.senderName}さんへの返信: ${messageSummary(message)}`;
     replyPreviewBox.classList.add('active');
     closeMessageActions();
     chatInput.focus();
+}
+
+byId('actionReplyBtn').addEventListener('click', () => {
+    if (selectedMessage) startReply(selectedMessage);
 });
 actionUnsendBtn.addEventListener('click', async () => {
     if (!selectedMessage || !currentRoomId) return;
@@ -1082,6 +1085,91 @@ function markRead(roomId, feed, message) {
     updateDoc(doc(db, 'rooms', roomId, 'messages', message.id), { readUsers: arrayUnion(uid) })
         .catch(error => console.error('既読にできませんでした。', error))
         .finally(() => feed.pendingReceipts.delete(message.id));
+}
+
+function bindReplySwipe(row, message) {
+    const threshold = 56;
+    const limit = 72;
+    const indicator = element('span', 'reply-swipe-indicator');
+    const svgNamespace = 'http://www.w3.org/2000/svg';
+    const icon = document.createElementNS(svgNamespace, 'svg');
+    const path = document.createElementNS(svgNamespace, 'path');
+    icon.classList.add('icon');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    path.setAttribute('d', 'm9 7-5 5 5 5M4 12h12a4 4 0 0 0 4-4V5');
+    icon.append(path);
+    indicator.setAttribute('aria-hidden', 'true');
+    indicator.append(icon);
+    row.append(indicator);
+
+    let gesture;
+    let suppressActivation = false;
+
+    row.addEventListener('pointerdown', event => {
+        if (!event.isPrimary) return;
+        suppressActivation = false;
+        if (event.button !== 0) return;
+        gesture = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    });
+
+    row.addEventListener('pointermove', event => {
+        if (gesture?.id !== event.pointerId || gesture.axis === 'vertical') return;
+        const dx = event.clientX - gesture.x;
+        const dy = event.clientY - gesture.y;
+        if (!gesture.axis) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) < 4) return;
+            gesture.axis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
+            if (gesture.axis === 'vertical') return;
+        }
+        if (!suppressActivation && Math.abs(dx) >= 10) {
+            suppressActivation = true;
+            row.setPointerCapture(event.pointerId);
+        }
+        if (suppressActivation && event.cancelable) event.preventDefault();
+
+        const left = Math.max(0, -dx);
+        const excess = Math.max(0, left - limit);
+        const distance = Math.min(left, limit) + (6 * excess) / (24 + excess);
+        row.classList.add('reply-swiping');
+        row.style.setProperty('--reply-swipe-distance', `${distance}px`);
+        row.style.setProperty('--reply-swipe-opacity', Math.min(left / threshold, 1));
+        if (left >= threshold && !gesture.vibrated) {
+            gesture.vibrated = true;
+            navigator.vibrate?.(10);
+        }
+    });
+
+    function finishSwipe(event) {
+        if (gesture?.id !== event.pointerId) return;
+        const shouldReply = event.type === 'pointerup' && gesture.axis === 'horizontal' &&
+            gesture.x - event.clientX >= threshold;
+        gesture = undefined;
+        row.classList.remove('reply-swiping');
+        row.style.removeProperty('--reply-swipe-distance');
+        row.style.removeProperty('--reply-swipe-opacity');
+        if (shouldReply) {
+            suppressActivation = true;
+            startReply(message);
+        }
+    }
+
+    function preventSwipeActivation(event) {
+        if (!suppressActivation) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    }
+
+    row.addEventListener('pointerup', finishSwipe);
+    row.addEventListener('pointercancel', finishSwipe);
+    row.addEventListener('lostpointercapture', event => {
+        if (event.target === row) finishSwipe(event);
+    });
+    row.addEventListener('pointerleave', event => {
+        if (!row.hasPointerCapture(event.pointerId)) finishSwipe(event);
+    });
+    row.addEventListener('click', preventSwipeActivation, true);
+    row.addEventListener('contextmenu', preventSwipeActivation, true);
+    row.addEventListener('dragstart', event => event.preventDefault());
 }
 
 function renderChat() {
@@ -1156,6 +1244,7 @@ function renderChat() {
         }
         status.append(element('span', 'time', `${time.getHours()}:${String(time.getMinutes()).padStart(2, '0')}`));
         row.append(status);
+        if (message.type !== 'system' && message.type !== 'unsent') bindReplySwipe(row, message);
         history.append(row);
     }
     chatLog.replaceChildren(history);

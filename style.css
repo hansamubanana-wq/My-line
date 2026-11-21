@@ -281,6 +281,7 @@ button:disabled { cursor: default; }
     min-height: 0;
     padding: 20px clamp(12px, 3vw, 36px);
     overflow: auto;
+    overflow-x: hidden;
 }
 .chat-log > :first-child { margin-top: auto; }
 .message-date, .message.unsent .bubble {
@@ -292,7 +293,32 @@ button:disabled { cursor: default; }
     text-align: center;
 }
 .message-date { flex: none; }
-.message { display: flex; flex: none; align-items: flex-end; gap: 6px; min-width: 0; }
+.message {
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: flex-end;
+    gap: 6px;
+    min-width: 0;
+    touch-action: pan-y;
+    transform: translateX(calc(-1 * var(--reply-swipe-distance, 0px)));
+    transition: transform 0.2s ease-out;
+}
+.message.reply-swiping { transition: none; }
+.reply-swipe-indicator {
+    position: absolute;
+    inset: 0 auto 0 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    place-items: center;
+    width: var(--reply-swipe-distance, 0px);
+    overflow: hidden;
+    color: var(--muted);
+    opacity: var(--reply-swipe-opacity, 0);
+    pointer-events: none;
+    transition: width 0.2s ease-out, opacity 0.2s ease-out;
+}
+.reply-swiping .reply-swipe-indicator { transition: none; }
 .chat-avatar { align-self: flex-start; margin-right: 2px; }
 .bubble-wrapper { display: grid; min-width: 0; max-width: 68%; }
 .user-name-label { margin-bottom: 2px; font-size: 11px; color: var(--muted); }
